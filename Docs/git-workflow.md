@@ -157,6 +157,10 @@ E:/unity/unity-version/6000.6.7f1/Editor/Data/Tools/UnityYAMLMerge.exe
 
 ```bash
 cd E:/unity/jam
+
+# 换行符策略必须一致，否则每次拉取都会显示"整个文件被修改"
+git config core.autocrlf true
+
 git config merge.unityyamlmerge.name "Unity SmartMerge"
 git config merge.unityyamlmerge.driver "'E:/unity/unity-version/6000.6.7f1/Editor/Data/Tools/UnityYAMLMerge.exe' merge -p %O %A %B %L %P"
 ```
