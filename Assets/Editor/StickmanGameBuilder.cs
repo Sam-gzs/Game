@@ -72,40 +72,12 @@ public static class StickmanGameBuilder
         "##################################"
     };
 
-    [MenuItem("Tools/Stickman Jump/Build All")]
-    public static void BuildAll()
-    {
-        bool ok = EditorUtility.DisplayDialog(
-            "Rebuild every level?",
-            "This regenerates MainMenu and Level1-3 from the ASCII maps in this script.\n\n" +
-            "Any map edited by hand in those scenes will be LOST.\n\n" +
-            "If you only want to edit a level, just open its scene and use the Grid Painter instead.",
-            "Overwrite everything", "Cancel");
-        if (!ok) return;
-
-        EnsureFolders();
-        Sprite sprite = EnsureWhiteSprite();
-        Material material = EnsureMaterial();
-        PlayerSettings.runInBackground = true;
-
-        GameObject tilePrefab = GridSceneUtil.EnsurePrefab(sprite, material);
-        EnsureVariantPrefab(tilePrefab, TileType.Dirt, GridSceneUtil.PrefabFolder + "/BreakableDirt.prefab");
-        EnsureVariantPrefab(tilePrefab, TileType.Door, GridSceneUtil.PrefabFolder + "/LevelDoor.prefab");
-
-        BuildMenuScene();
-        BuildLevel(0, MapTutorial, sprite, material, tilePrefab);
-        BuildLevel(1, MapPractice, sprite, material, tilePrefab);
-        BuildLevel(2, MapChallenge, sprite, material, tilePrefab);
-
-        var scenes = new EditorBuildSettingsScene[4];
-        scenes[0] = new EditorBuildSettingsScene(MenuScenePath, true);
-        for (int i = 0; i < 3; i++)
-            scenes[i + 1] = new EditorBuildSettingsScene(ScenesFolder + "/Level" + (i + 1) + ".unity", true);
-        EditorBuildSettings.scenes = scenes;
-
-        AssetDatabase.SaveAssets();
-        Debug.Log("[StickmanGameBuilder] Built MainMenu + 3 grid levels.");
-    }
+    // ------------------------------------------------------------------
+    // "Build All" 已移除（2026-11-05）
+    // 它会把本文件里过时的 34 格 ASCII 地图重新铺到 Level1-3 上，覆盖现有 43~98 格
+    // 的手工关卡，并把 EditorBuildSettings 重置成 4 个场景（菜单只剩 3 关）。
+    // 需要重建单关请用下面的 "Rebuild Current Level From Map"，或直接用 Tools > Grid Painter。
+    // ------------------------------------------------------------------
 
     [MenuItem("Tools/Stickman Jump/Rebuild Current Level From Map")]
     public static void RebuildLevelsOnly()
