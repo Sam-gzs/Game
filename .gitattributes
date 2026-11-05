@@ -1,0 +1,25 @@
+# Unity 场景 / 预制体：交给 Unity SmartMerge 尝试合并
+# 需要每台机器本地配置驱动，命令见 Docs/git-workflow.md 第 7 节
+*.unity      merge=unityyamlmerge
+*.prefab     merge=unityyamlmerge
+*.mat        merge=unityyamlmerge
+*.anim       merge=unityyamlmerge
+*.controller merge=unityyamlmerge
+
+# 二进制资源：不做文本合并
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.psd   binary
+*.tga   binary
+*.exr   binary
+*.wav   binary
+*.mp3   binary
+*.ogg   binary
+*.mp4   binary
+*.mov   binary
+*.ttf   binary
+*.otf   binary
+*.dll   binary
+*.unitypackage binary
+*.zip   binary
