@@ -1,0 +1,50 @@
+# ---- Unity 生成目录（不要进版本库）----
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+_Recovery/
+
+# ---- IDE / 自动生成的项目文件 ----
+*.csproj
+*.unityproj
+*.sln
+*.slnx
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+.vs/
+.idea/
+.vscode/
+.consulo/
+
+# ---- 构建产物 ----
+*.apk
+*.aab
+*.unitypackage
+*.app
+*.exe
+*.zip
+
+# ---- 崩溃 / 系统文件 ----
+sysinfo.txt
+crashlytics-build.properties
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---- 临时截图（MCP 截图工具的默认输出目录）----
+Assets/Screenshots/
+Assets/Screenshots.meta

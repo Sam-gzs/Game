@@ -1,0 +1,1014 @@
+using UnityEngine;
+
+public enum TileType
+{
+    Solid,
+    Stone,
+    Bounce,
+    Spawn,
+    Goal,
+    Dirt,
+    Door,
+    Falling,
+    RefractorDown,   // "\"  a box going right comes out going down
+    RefractorUp,     // "/"  a box going right comes out going up
+    Switch,          // 1x1 button: a box passes through it and presses it
+    Gate,            // 2 cells tall: solid until its button is pressed
+    Pickup,          // 1x1 pickup: walking into it grants one more box
+    Mirror,          // motorized mirror: channel drives "\" <-> "/"
+    Plate,           // 1x1 pressure plate: pressed while a body is on it
+    Wood,            // breakable by a ball with speed >= 2
+    Refract,         // ball enters the cell and leaves turned 90 degrees clockwise
+    Sticky,          // ball sticks to this block and does not fall
+    Jelly,           // passable by player and ball; slows the player, costs the ball 1 momentum
+    Slider,          // solid to bodies, but the sticky slime cannot stick to / rest on it
+    BallSwitch,      // channel switch that is ON only while a ball is inside its cell
+    TriggerPlayer,   // invisible in play; fires a tutorial text when the player enters
+    TriggerBall,     // invisible in play; fires a tutorial text when a ball is in the cell
+    TextAnchor       // invisible in play; marker that owns/displays the tutorial text
+}
+
+/// <summary>
+/// One map cell. Drop the GridTile prefab into the scene and change its type,
+/// or use Tools > Grid Painter to paint cells.
+/// </summary>
+[ExecuteAlways]
+public class GridTile : MonoBehaviour
+{
+    public TileType type = TileType.Solid;
+    public Vector2Int cell;
+    public Sprite baseSprite;
+    [SerializeField, HideInInspector] TileType lastType = TileType.Solid;
+
+    [Tooltip("Switches, gates, mirrors and plates are bound by this number: same channel = same circuit.")]
+    public int channel = 1;
+
+    [Tooltip("Gate: invert its state (open while the channel is off).")]
+    public bool invert;
+
+    [Tooltip("Mirror: true = '\\', false = '/'. A channel signal sets it to '/' when on.")]
+    public bool mirrorDown = true;
+
+    [Header("Tutorial text (used by TextAnchor)")]
+    [TextArea] public string tutorialText = "TEXT";
+    public int tutorialFontSize = 28;
+    public Font tutorialFont;
+    public float tutorialDuration = 3f;
+    public Color tutorialColor = Color.white;
+    [Tooltip("World-space offset from this tile's centre.")]
+    public Vector2 tutorialOffset;
+
+    float tutorialTimer;
+    GUIStyle tutorialStyle;
+    bool ballTriggerInside;
+
+    public bool SwitchOn { get; private set; }
+    public bool GateOpen { get; private set; }
+    public bool PlatePressed { get; private set; }
+    float nextSwitchTime;
+    bool playerOnPlate;
+
+    public static readonly Color SolidColor = new Color(0.20f, 0.23f, 0.31f, 1f);
+    public static readonly Color SolidEdge = new Color(0.36f, 0.43f, 0.58f, 1f);
+    public static readonly Color StoneColor = new Color(0.55f, 0.37f, 0.31f, 1f);
+    public static readonly Color BounceColor = new Color(0.11f, 0.80f, 0.74f, 1f);
+    public static readonly Color GoalColor = new Color(1f, 0.84f, 0.32f, 1f);
+    public static readonly Color WoodColor = new Color(0.78f, 0.52f, 0.24f, 1f);
+    public static readonly Color DirtColor = new Color(0.52f, 0.36f, 0.22f, 1f);
+    public static readonly Color RefractColor = new Color(0.45f, 0.85f, 1.00f, 1f);
+    public static readonly Color StickyColor = new Color(0.60f, 0.90f, 0.40f, 1f);
+    public static readonly Color DoorColor = new Color(0.95f, 0.78f, 0.35f, 1f);
+    public static readonly Color FallingColor = new Color(0.78f, 0.66f, 0.42f, 1f);
+    public static readonly Color SpawnColor = new Color(0.85f, 0.28f, 0.95f, 0.85f);
+
+    /// <summary>The only kind of block that falls; every other kind stays where it is.</summary>
+    public float fallSpeed = 9f;
+
+    SpriteRenderer sr;
+    BoxCollider2D col;
+    Transform pipsRoot;
+    SpriteRenderer[] pips;
+
+    bool falling;
+    float fallT;
+    Vector3 fallFrom;
+    Vector3 fallTo;
+
+    // Sticky block: floats when free, can be pushed/carried by the ball.
+    public BoxProjectile followBall;
+    public GridTile followFalling;
+    bool stickyFalling;
+    float stickyFallT;
+    Vector3 stickyFrom;
+    Vector3 stickyTo;
+
+    public bool IsFalling => falling;
+
+    void OnEnable()
+    {
+        // Same one-time safety as OnValidate, but for an already-saved scene:
+        // an old BallSwitch instance with no lastType starts unwired.
+        // Only the default channel (1) is treated as "unwired": a channel of 2/3/...
+        // is an explicit designer choice and must survive, otherwise the gate it
+        // points at can never be opened.
+        if (type == TileType.BallSwitch && lastType != TileType.BallSwitch && channel <= 1)
+        {
+            channel = 0;
+            lastType = type;
+        }
+        Apply();
+    }
+
+    void OnValidate()
+    {
+        // A newly created ball-hold switch must not silently join channel 1 and
+        // open/close some existing gate. Start unwired (0); the designer assigns it.
+        // An explicitly wired channel (>= 2) is kept as-is.
+        if (type == TileType.BallSwitch && lastType != TileType.BallSwitch && channel <= 1) channel = 0;
+        lastType = type;
+
+        Apply();
+#if UNITY_EDITOR
+        if (!Application.isPlaying) EnforceGrid();
+#endif
+    }
+
+    void Update()
+    {
+        // no per-frame work in edit mode: snapping happens when the tile is selected
+        // (GridSnapKeeper) or when the inspector changes (OnValidate)
+        if (!Application.isPlaying) return;
+
+        if (type == TileType.Falling) FallTick();
+        else if (type == TileType.Plate) PlateTick();
+        else if (type == TileType.Sticky) StickyTick();
+        else if (type == TileType.BallSwitch) BallSwitchTick();
+        else if (type == TileType.TriggerBall) TriggerBallTick();
+        else if (type == TileType.TextAnchor && tutorialTimer > 0f)
+            tutorialTimer = Mathf.Max(0f, tutorialTimer - Time.deltaTime);
+    }
+
+    /// <summary>Fires once when a ball's logical cell enters this tile.</summary>
+    void TriggerBallTick()
+    {
+        bool inside = BoxProjectile.IsBoxAt(cell);
+        if (inside && !ballTriggerInside) FireTutorial(channel);
+        ballTriggerInside = inside;
+    }
+
+    /// <summary>Show the TextAnchor text(s) on the same channel.</summary>
+    void FireTutorial(int ch)
+    {
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            var t = tiles[i];
+            if (t == null || t.type != TileType.TextAnchor || t.channel != ch) continue;
+            t.ShowTutorial();
+        }
+    }
+
+    public void ShowTutorial()
+    {
+        tutorialTimer = Mathf.Max(0.1f, tutorialDuration);
+    }
+
+    /// <summary>Falling blocks drop cell by cell until something is under them.</summary>
+    void FallTick()
+    {
+        if (falling)
+        {
+            fallT += Time.deltaTime * fallSpeed;
+            transform.position = Vector3.Lerp(fallFrom, fallTo, Mathf.Clamp01(fallT));
+            if (fallT >= 1f)
+            {
+                falling = false;
+                fallT = 0f;
+                transform.position = fallTo;
+            }
+            return;
+        }
+
+        var below = new Vector2Int(cell.x, cell.y - 1);
+
+        // A cell can hold a button/plate plus the block that dropped into it, so inspect
+        // every tile in the cell. A gate occupies two cells and open gates are passable.
+        GridTile button = null;
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            var t = tiles[i];
+            if (t == null || t == this || !t.OccupiesCell(below)) continue;
+
+            // buttons/plates are not a floor: the block drops through and presses them
+            // jelly is soft: everything passes through it
+            if (t.type == TileType.Switch || t.type == TileType.Plate ||
+                t.type == TileType.Jelly || t.type == TileType.BallSwitch ||
+                t.type == TileType.TriggerPlayer || t.type == TileType.TriggerBall ||
+                t.type == TileType.TextAnchor)
+            {
+                if (t.type == TileType.Switch) button = t;
+                continue;
+            }
+
+            if (t.type == TileType.Gate && t.GateOpen) continue; // open gate = hole
+            if (t.type == TileType.Sticky)
+                return; // the sticky decides whether it can move down first (and the block follows)
+
+            return; // a normal tile / closed gate is a floor
+        }
+
+        // A thrown box (BoxProjectile) is not a GridTile: the block lands on top of it.
+        if (BoxProjectile.IsBoxAt(below)) return;
+
+        falling = true;
+        fallT = 0f;
+        fallFrom = transform.position;
+        cell = below;
+        fallTo = GridUtil.CellCenter(cell);
+
+        if (button != null) button.PressButton();
+    }
+
+    public static GridTile FindAt(Vector2Int c)
+    {
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            if (tiles[i].cell == c) return tiles[i];
+        }
+        return null;
+    }
+
+    /// <summary>Normal bricks anchor a sticky block. Jelly and specials do not.</summary>
+    public static bool IsNormalBrick(TileType t)
+    {
+        return t == TileType.Solid || t == TileType.Stone || t == TileType.Wood || t == TileType.Dirt;
+    }
+
+    /// <summary>Sticky touches a normal brick on any 4-neighbour side: it is glued and cannot be pushed.</summary>
+    public bool IsStickyAnchored()
+    {
+        if (type != TileType.Sticky) return false;
+
+        var dirs = new[]
+        {
+            Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right
+        };
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        for (int d = 0; d < dirs.Length; d++)
+        {
+            Vector2Int c = cell + dirs[d];
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                var t = tiles[i];
+                if (t == null || t == this || !t.OccupiesCell(c)) continue;
+                if (IsNormalBrick(t.type)) return true;
+            }
+        }
+        return false;
+    }
+
+    static bool IsStickyPassable(TileType t)
+    {
+        return t == TileType.Jelly || t == TileType.Switch || t == TileType.Plate ||
+               t == TileType.BallSwitch || t == TileType.TriggerPlayer ||
+               t == TileType.TriggerBall || t == TileType.TextAnchor;
+    }
+
+    /// <summary>Is there a solid block directly below the sticky? Jelly/buttons/plates/open gates do not count.</summary>
+    public bool HasBlockBelow()
+    {
+        Vector2Int belowCell = cell + Vector2Int.down;
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            var t = tiles[i];
+            if (t == null || t == this || !t.OccupiesCell(belowCell)) continue;
+
+            if (t.type == TileType.Falling) continue; // a moving falling block is not a support
+            if (t.type == TileType.Gate && t.GateOpen) continue;
+            if (IsStickyPassable(t.type)) continue;
+            return true;
+        }
+
+        return BoxProjectile.IsBoxAt(belowCell);
+    }
+
+    GridTile FindAdjacentFalling()
+    {
+        var dirs = new[]
+        {
+            Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right
+        };
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        for (int d = 0; d < dirs.Length; d++)
+        {
+            Vector2Int c = cell + dirs[d];
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                var t = tiles[i];
+                if (t == null || t == this || !t.OccupiesCell(c)) continue;
+                if (t.type == TileType.Falling) return t;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Can this sticky be dragged down by a falling block? No block below and not carried.</summary>
+    public bool CanStickyFall()
+    {
+        if (type != TileType.Sticky || followBall != null) return false;
+        if (HasBlockBelow()) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// A free sticky floats. It only moves when stuck to a falling block:
+    /// with no block below it falls with the block; with a block below it stays
+    /// and the falling block falls alone.
+    /// </summary>
+    void StickyTick()
+    {
+        if (followBall != null) return;
+
+        // Moving into a cell that touches a normal brick: it glues there, mid-motion.
+        if (IsStickyAnchored() && (followFalling != null || HasBlockBelow()))
+        {
+            followFalling = null;
+            stickyFalling = false;
+            stickyFallT = 0f;
+            transform.position = GridUtil.CellCenter(cell);
+            return;
+        }
+
+        if (stickyFalling)
+        {
+            stickyFallT += Time.deltaTime * fallSpeed;
+            transform.position = Vector3.Lerp(stickyFrom, stickyTo, Mathf.Clamp01(stickyFallT));
+            if (stickyFallT >= 1f)
+            {
+                stickyFalling = false;
+                stickyFallT = 0f;
+                transform.position = stickyTo;
+            }
+            return;
+        }
+
+        bool supported = HasBlockBelow();
+        if (supported) return; // a block below keeps even an anchored sticky in place; block falls alone
+
+        // No block below: a falling block is the only thing that can pull a stuck sticky off.
+        var adjacentFalling = FindAdjacentFalling();
+        if (adjacentFalling != null) followFalling = adjacentFalling;
+
+        if (followFalling == null || (!followFalling.IsFalling && followFalling.cell != cell + Vector2Int.up))
+            return; // floating: free sticky does not fall by itself
+        if (followFalling.cell == cell + Vector2Int.down) return;       // let it move first
+        if (!CanStickyFall()) return;
+
+        stickyFalling = true;
+        stickyFallT = 0f;
+        stickyFrom = transform.position;
+        cell += Vector2Int.down;
+        stickyTo = GridUtil.CellCenter(cell);
+    }
+
+    /// <summary>The carrying ball moves one cell; the sticky follows into the cell it just left.</summary>
+    public void FollowTo(Vector2Int newCell)
+    {
+        stickyFalling = false;
+        stickyFallT = 0f;
+        cell = newCell;
+        transform.position = new Vector3(newCell.x + 0.5f, newCell.y + 0.5f, 0f);
+
+        // While being carried, touching a normal brick glues it mid-motion.
+        if (IsStickyAnchored())
+        {
+            followFalling = null;
+            if (followBall != null)
+            {
+                followBall.followSticky = null;
+                followBall = null;
+            }
+        }
+    }
+
+    public void AttachTo(BoxProjectile ball)
+    {
+        if (followBall != null && followBall != ball) followBall.followSticky = null;
+        if (ball != null && ball.followSticky != null && ball.followSticky != this)
+            ball.followSticky.DetachFromBall();
+
+        followBall = ball;
+        if (ball != null) ball.followSticky = this;
+        stickyFalling = false;
+    }
+
+    public void DetachFromBall()
+    {
+        followBall = null;
+        stickyFalling = false;
+    }
+
+    void OnDestroy()
+    {
+        if (followBall != null) followBall.followSticky = null;
+    }
+
+    /// <summary>Does this tile occupy that cell? A gate fills two cells.</summary>
+    public bool OccupiesCell(Vector2Int c)
+    {
+        if (c == cell) return true;
+        return type == TileType.Gate && c == cell + Vector2Int.up;
+    }
+
+    /// <summary>The cell a body standing on top of this tile occupies.</summary>
+    public Vector2Int CellAboveTop
+    {
+        get
+        {
+            int height = type == TileType.Gate ? 2 : 1;
+            return new Vector2Int(cell.x, cell.y + height);
+        }
+    }
+
+    /// <summary>A button is pressed by a box, a falling block or the player.</summary>
+    public void PressButton()
+    {
+        if (type != TileType.Switch) return;
+        if (Time.time < nextSwitchTime) return;
+
+        nextSwitchTime = Time.time + 0.4f;
+        GateSystem.Toggle(channel, this);
+    }
+
+    /// <summary>Channel signal: gates open/close, mirrors turn. Other tiles ignore it.</summary>
+    public void OnSignal(bool open)
+    {
+        if (type == TileType.Gate) SetGateOpen(invert ? !open : open);
+        else if (type == TileType.Mirror) SetMirrorOpen(open);
+    }
+
+    public void SetMirrorOpen(bool open)
+    {
+        mirrorDown = !open;
+        if (sr == null) sr = GetComponent<SpriteRenderer>();
+        if (sr != null)
+            sr.sprite = RefractorSprite(mirrorDown ? TileType.RefractorDown : TileType.RefractorUp);
+    }
+
+    /// <summary>Mirror/reflect mapping: a 45-degree mirror bounces the ball at its face.</summary>
+    public Vector2Int RefractDirection(Vector2Int d)
+    {
+        bool down = type == TileType.RefractorDown || (type == TileType.Mirror && mirrorDown);
+        if (down) return new Vector2Int(-d.y, -d.x);
+        return new Vector2Int(d.y, d.x);
+    }
+
+    /// <summary>Refract: the ball enters the cell and leaves turned 90 degrees clockwise.</summary>
+    public Vector2Int Refract90Direction(Vector2Int d)
+    {
+        return new Vector2Int(d.y, -d.x);
+    }
+
+    /// <summary>How much speed a ball needs to break this block. 0 means unbreakable.</summary>
+    public static int BallBreakThreshold(TileType t)
+    {
+        if (t == TileType.Dirt) return 1;
+        if (t == TileType.Wood) return 2;
+        if (t == TileType.Stone) return 3;
+        return 0;
+    }
+
+    /// <summary>Small white pips at the bottom of a block show the required ball speed.</summary>
+    void SetThresholdPips(int count)
+    {
+        if (pipsRoot == null)
+        {
+            var existing = transform.Find("ThresholdPips");
+            if (existing != null) pipsRoot = existing;
+        }
+        if (pipsRoot == null)
+        {
+            var go = new GameObject("ThresholdPips");
+            go.transform.SetParent(transform, false);
+            pipsRoot = go.transform;
+        }
+        if (pips == null || pips.Length != 3)
+        {
+            var list = new System.Collections.Generic.List<SpriteRenderer>();
+            for (int i = 0; i < pipsRoot.childCount; i++)
+            {
+                var c = pipsRoot.GetChild(i);
+                var s = c.GetComponent<SpriteRenderer>();
+                if (s != null) list.Add(s);
+            }
+            while (list.Count < 3)
+            {
+                var go = new GameObject("pip");
+                go.transform.SetParent(pipsRoot, false);
+                var s = go.AddComponent<SpriteRenderer>();
+                s.sprite = baseSprite;
+                s.color = new Color(1f, 0.96f, 0.75f, 1f);
+                s.sortingOrder = 2;
+                list.Add(s);
+            }
+            pips = list.ToArray();
+        }
+
+        if (baseSprite != null)
+        {
+            for (int i = 0; i < pips.Length; i++) pips[i].sprite = baseSprite;
+        }
+
+        for (int i = 0; i < pips.Length; i++)
+        {
+            var p = pips[i];
+            p.transform.localScale = Vector3.one * 0.12f;
+            p.transform.localPosition = new Vector3((i - (count - 1) * 0.5f) * 0.18f, -0.33f, 0f);
+            p.enabled = i < count;
+        }
+        pipsRoot.gameObject.SetActive(count > 0);
+    }
+
+    void PlateTick()
+    {
+        bool pressed = playerOnPlate || BoxProjectile.IsBoxAt(cell) || HasFallingAt(cell);
+        if (pressed == PlatePressed) return;
+
+        PlatePressed = pressed;
+        RefreshPlateVisual();
+        GateSystem.RefreshPlates(channel);
+    }
+
+    /// <summary>
+    /// A ball-hold switch: ON only while a ball's logical cell is this cell.
+    /// It uses the same channel/parity logic as a normal Switch.
+    /// </summary>
+    void BallSwitchTick()
+    {
+        bool pressed = BoxProjectile.IsBoxAt(cell);
+        if (pressed == SwitchOn) return;
+
+        SetSwitchState(pressed);
+        GateSystem.RefreshButtons(channel);
+        Debug.Log($"BallSwitch {cell} ch{channel} -> {(pressed ? "ON" : "OFF")}");
+    }
+
+    static bool HasFallingAt(Vector2Int c)
+    {
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            var t = tiles[i];
+            if (t != null && t.type == TileType.Falling && t.cell == c) return true;
+        }
+        return false;
+    }
+
+    void RefreshPlateVisual()
+    {
+        if (sr == null) sr = GetComponent<SpriteRenderer>();
+        if (sr == null) return;
+        if (baseSprite != null) sr.sprite = baseSprite;
+        sr.color = PlatePressed
+            ? new Color(0.35f, 0.95f, 1.00f, 1f)
+            : new Color(0.16f, 0.45f, 0.55f, 0.95f);
+    }
+
+    /// <summary>
+    /// Edit-mode only: a tile can only ever sit in one cell. Dragging it in the scene
+    /// snaps it to the centre of the nearest cell and locks its scale to 1.
+    /// </summary>
+#if UNITY_EDITOR
+    public void EnforceGrid()
+    {
+        Vector2Int target = GridUtil.WorldToCell(new Vector2(transform.position.x, transform.position.y));
+        if (cell != target)
+        {
+            cell = target;
+            UnityEditor.EditorUtility.SetDirty(this);
+        }
+
+        if (transform.localScale != Vector3.one)
+        {
+            transform.localScale = Vector3.one;
+            UnityEditor.EditorUtility.SetDirty(this);
+        }
+
+        Vector2 center = GridUtil.CellCenter(target);
+        Vector3 pos = new Vector3(center.x, center.y, 0f);
+        if ((transform.position - pos).sqrMagnitude > 0.000001f)
+        {
+            transform.position = pos;
+            UnityEditor.EditorUtility.SetDirty(this);
+        }
+
+        // self-heal an old door (child sprites, half-cell offset) into the single-sprite door
+        if (type == TileType.Door && col != null)
+        {
+            bool wrongCollider = !col.isTrigger
+                || !Mathf.Approximately(col.size.x, 1f) || !Mathf.Approximately(col.size.y, 2f)
+                || !Mathf.Approximately(col.offset.x, 0f) || !Mathf.Approximately(col.offset.y, 0.5f);
+            bool hasOldChildren = transform.Find("DoorVisual") is Transform dv && dv.gameObject.activeSelf;
+            bool wrongSprite = DoorSprite != null && sr != null && sr.sprite != DoorSprite;
+
+            if (wrongCollider || hasOldChildren || wrongSprite) Apply();
+        }
+    }
+#endif
+
+    public void SetType(TileType t)
+    {
+        if (t == TileType.BallSwitch && type != TileType.BallSwitch) channel = 0;
+        type = t;
+        lastType = t;
+        Apply();
+    }
+
+    public void Apply()
+    {
+        if (sr == null) sr = GetComponent<SpriteRenderer>();
+        if (sr == null) sr = gameObject.AddComponent<SpriteRenderer>();
+        if (col == null) col = GetComponent<BoxCollider2D>();
+        if (col == null) col = gameObject.AddComponent<BoxCollider2D>();
+
+        col.size = Vector2.one;
+        col.offset = Vector2.zero;
+        transform.localScale = Vector3.one;
+
+        if (baseSprite == null && type != TileType.Door) baseSprite = sr.sprite;
+        RemoveDoorVisual();
+
+        if (type != TileType.Door && baseSprite != null) sr.sprite = baseSprite;
+
+        switch (type)
+        {
+            case TileType.Solid:
+                sr.color = SolidColor;
+                sr.enabled = true;
+                col.enabled = true;
+                col.isTrigger = false;
+                break;
+            case TileType.Stone:
+                sr.color = StoneColor;
+                sr.enabled = true;
+                col.enabled = true;
+                col.isTrigger = false;
+                break;
+            case TileType.Wood:
+                sr.color = WoodColor;
+                sr.enabled = true;
+                col.enabled = true;
+                col.isTrigger = false;
+                break;
+            case TileType.Refract:
+                sr.enabled = true;
+                sr.color = RefractColor;
+                sr.sprite = ResourceSprite("Refract90");
+                col.enabled = true;
+                col.isTrigger = false;
+                break;
+            case TileType.Sticky:
+                sr.enabled = true;
+                sr.color = StickyColor;
+                sr.sprite = ResourceSprite("Sticky");
+                col.enabled = true;
+                col.isTrigger = false;
+                break;
+            case TileType.Jelly:
+                sr.enabled = true;
+                sr.color = Color.white;
+                sr.sprite = ResourceSprite("Jelly");
+                col.enabled = true;
+                col.isTrigger = true;
+                break;
+            case TileType.Slider:
+                sr.enabled = true;
+                sr.color = Color.white;
+                sr.sprite = ResourceSprite("Slider");
+                col.enabled = true;
+                col.isTrigger = false;
+                break;
+            case TileType.Bounce:
+                sr.color = BounceColor;
+                sr.enabled = true;
+                col.enabled = true;
+                col.isTrigger = false;
+                break;
+            case TileType.Dirt:
+                sr.color = DirtColor;
+                sr.enabled = true;
+                col.enabled = true;
+                col.isTrigger = false;
+                break;
+            case TileType.Falling:
+                sr.color = FallingColor;
+                sr.enabled = true;
+                col.enabled = true;
+                col.isTrigger = false;
+                break;
+            case TileType.Door:
+                // one sprite, no child objects: the door must be clickable / draggable itself
+                sr.enabled = true;
+                sr.color = Color.white;
+                if (DoorSprite != null) sr.sprite = DoorSprite;
+                col.enabled = true;
+                col.isTrigger = true;
+                // exactly the two cells that start at this tile's cell
+                col.size = new Vector2(1f, 2f);
+                col.offset = new Vector2(0f, 0.5f);
+                break;
+            case TileType.Goal:
+                sr.color = GoalColor;
+                sr.enabled = true;
+                col.enabled = true;
+                col.isTrigger = true;
+                break;
+            case TileType.RefractorDown:
+            case TileType.RefractorUp:
+                sr.enabled = true;
+                sr.color = Color.white;
+                sr.sprite = RefractorSprite(type);
+                col.enabled = true;
+                col.isTrigger = false; // a solid block: the box turns at its face
+                break;
+            case TileType.Mirror:
+                sr.enabled = true;
+                sr.color = Color.white;
+                sr.sprite = RefractorSprite(mirrorDown ? TileType.RefractorDown : TileType.RefractorUp);
+                col.enabled = true;
+                col.isTrigger = false;
+                break;
+            case TileType.Switch:
+                sr.enabled = true;
+                sr.color = Color.white;
+                sr.sprite = ResourceSprite("SwitchOff");
+                col.enabled = true;
+                col.isTrigger = false;
+                SwitchOn = false;
+                break;
+            case TileType.BallSwitch:
+                sr.enabled = true;
+                // cyan tint distinguishes it from the normal latching switch
+                sr.color = new Color(0.55f, 0.95f, 1.00f, 1f);
+                sr.sprite = ResourceSprite("SwitchOff");
+                // no physical presence at all: the player, ball and falling blocks all pass
+                col.enabled = false;
+                col.isTrigger = true;
+                SwitchOn = false;
+                break;
+            case TileType.Gate:
+                sr.enabled = true;
+                sr.color = Color.white;
+                sr.sprite = ResourceSprite("Gate");
+                col.enabled = true;
+                col.isTrigger = false;
+                col.size = new Vector2(1f, 2f);
+                col.offset = new Vector2(0f, 0.5f);
+                SetGateOpen(invert); // an inverted gate starts open
+                break;
+            case TileType.Plate:
+                sr.enabled = true;
+                if (baseSprite != null) sr.sprite = baseSprite;
+                col.enabled = true;
+                col.isTrigger = true;
+                col.size = Vector2.one;
+                col.offset = Vector2.zero;
+                PlatePressed = false;
+                playerOnPlate = false;
+                RefreshPlateVisual();
+                break;
+            case TileType.Pickup:
+                sr.enabled = true;
+                sr.color = Color.white;
+                sr.sprite = ResourceSprite("Pickup");
+                col.enabled = true;
+                col.isTrigger = true;
+                break;
+            case TileType.Spawn:
+                // visible marker while editing, invisible while playing
+                sr.enabled = !Application.isPlaying;
+                sr.color = SpawnColor;
+                col.enabled = false;
+                break;
+            case TileType.TriggerPlayer:
+            case TileType.TriggerBall:
+                // editor-only marker, trigger-only collider (no movement impact)
+                sr.enabled = !Application.isPlaying;
+                sr.sprite = baseSprite != null ? baseSprite : ResourceSprite("SwitchOff");
+                sr.color = type == TileType.TriggerPlayer
+                    ? new Color(1f, 0.32f, 0.88f, 1f)
+                    : new Color(0.30f, 0.90f, 1f, 1f);
+                col.enabled = true;
+                col.isTrigger = true;
+                break;
+            case TileType.TextAnchor:
+                // editor-only marker for where the tutorial text appears
+                sr.enabled = !Application.isPlaying;
+                sr.sprite = baseSprite != null ? baseSprite : ResourceSprite("SwitchOff");
+                sr.color = new Color(1f, 0.90f, 0.30f, 1f);
+                col.enabled = false;
+                break;
+        }
+
+        int speedPips = type == TileType.Stone ? 3 : type == TileType.Wood ? 2 : type == TileType.Dirt ? 1 : 0;
+        SetThresholdPips(speedPips);
+
+        sr.sortingOrder = 1;
+    }
+
+    static Sprite s_door;
+
+    static Sprite DoorSprite
+    {
+        get
+        {
+            if (s_door == null) s_door = Resources.Load<Sprite>("Door");
+            return s_door;
+        }
+    }
+
+    static Sprite s_refractDown;
+    static Sprite s_refractUp;
+
+    static Sprite RefractorSprite(TileType t)
+    {
+        if (t == TileType.RefractorDown)
+        {
+            if (s_refractDown == null) s_refractDown = Resources.Load<Sprite>("RefractDown");
+            return s_refractDown;
+        }
+        if (s_refractUp == null) s_refractUp = Resources.Load<Sprite>("RefractUp");
+        return s_refractUp;
+    }
+
+    /// <summary>
+    /// The old door was built from child sprites, which stole scene clicks (you could not
+    /// select / drag the door). They are hidden so the single door sprite is what you hit.
+    /// </summary>
+    void RemoveDoorVisual()
+    {
+        var child = transform.Find("DoorVisual");
+        if (child == null) return;
+        if (child.gameObject.activeSelf) child.gameObject.SetActive(false);
+    }
+
+    static readonly System.Collections.Generic.Dictionary<string, Sprite> s_sprites =
+        new System.Collections.Generic.Dictionary<string, Sprite>();
+
+    static Sprite ResourceSprite(string name)
+    {
+        Sprite s;
+        if (s_sprites.TryGetValue(name, out s) && s != null) return s;
+        s = Resources.Load<Sprite>(name);
+        s_sprites[name] = s;
+        return s;
+    }
+
+    public void SetSwitchState(bool on)
+    {
+        SwitchOn = on;
+        if (sr == null) sr = GetComponent<SpriteRenderer>();
+        if (sr != null) sr.sprite = ResourceSprite(on ? "SwitchOn" : "SwitchOff");
+    }
+
+    public void SetGateOpen(bool open)
+    {
+        GateOpen = open;
+        if (col == null) col = GetComponent<BoxCollider2D>();
+        if (col != null) col.enabled = !open;
+        if (sr == null) sr = GetComponent<SpriteRenderer>();
+        if (sr != null) sr.color = open ? new Color(1f, 1f, 1f, 0.25f) : Color.white;
+    }
+
+    void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (type != TileType.Switch) return;
+        if (collision.collider.GetComponent<PlayerController>() == null) return;
+
+        PressButton();
+    }
+
+#if UNITY_EDITOR
+    void OnDrawGizmos()
+    {
+        if (type == TileType.TriggerPlayer)
+        {
+            UnityEditor.Handles.Label(transform.position + new Vector3(0f, 0.9f, 0f), "P ch " + channel);
+            return;
+        }
+        if (type == TileType.TriggerBall)
+        {
+            UnityEditor.Handles.Label(transform.position + new Vector3(0f, 0.9f, 0f), "BALL ch " + channel);
+            return;
+        }
+        if (type == TileType.TextAnchor)
+        {
+            UnityEditor.Handles.Label(transform.position + new Vector3(0f, 0.9f, 0f), "TXT ch " + channel);
+            return;
+        }
+        if (type != TileType.Switch && type != TileType.Gate) return;
+        float lift = type == TileType.Gate ? 2.2f : 1.2f;
+        UnityEditor.Handles.Label(transform.position + new Vector3(0f, lift, 0f), "ch " + channel);
+    }
+#endif
+
+    void OnGUI()
+    {
+        if (!Application.isPlaying || type != TileType.TextAnchor || tutorialTimer <= 0f) return;
+        if (string.IsNullOrEmpty(tutorialText) || Camera.main == null) return;
+
+        if (tutorialStyle == null)
+        {
+            tutorialStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = true
+            };
+        }
+        if (tutorialFont != null) tutorialStyle.font = tutorialFont;
+        tutorialStyle.fontSize = tutorialFontSize;
+
+        float a = Mathf.Clamp01(tutorialTimer / 0.35f) * tutorialColor.a;
+        tutorialStyle.normal.textColor = new Color(tutorialColor.r, tutorialColor.g, tutorialColor.b, a);
+
+        Vector3 world = transform.position + (Vector3)tutorialOffset;
+        Vector3 sp = Camera.main.WorldToScreenPoint(world);
+        if (sp.z < 0f) return;
+
+        var content = new GUIContent(tutorialText);
+        Vector2 size = tutorialStyle.CalcSize(content);
+        var rect = new Rect(sp.x - size.x * 0.5f, (Screen.height - sp.y) - size.y * 0.5f, size.x, size.y);
+
+        Color old = GUI.color;
+        GUI.color = new Color(0f, 0f, 0f, 0.55f * a);
+        GUI.DrawTexture(new Rect(rect.x - 9f, rect.y - 6f, rect.width + 18f, rect.height + 12f), Texture2D.whiteTexture);
+        GUI.color = old;
+        GUI.Label(rect, content, tutorialStyle);
+    }
+
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        var player = other.GetComponent<PlayerController>();
+        if (player == null) return;
+
+        if (type == TileType.TriggerPlayer)
+        {
+            FireTutorial(channel);
+            return;
+        }
+
+        // jelly: passable, but the player is slowed while inside it
+        if (type == TileType.Jelly)
+        {
+            player.EnterJelly();
+            return;
+        }
+
+        // pressure plate: pressed while the player stands in its cell
+        if (type == TileType.Plate)
+        {
+            if (!playerOnPlate)
+            {
+                playerOnPlate = true;
+                PlateTick();
+            }
+            return;
+        }
+
+        // extra-box pickup
+        if (type == TileType.Pickup)
+        {
+            player.GrantExtraBox();
+            Destroy(gameObject);
+            return;
+        }
+
+        if (type != TileType.Goal && type != TileType.Door) return;
+
+        int index = 0;
+        var boot = Object.FindFirstObjectByType<LevelBootstrap>();
+        if (boot != null) index = boot.levelIndex;
+        if (LevelCompleteUI.Instance != null) LevelCompleteUI.Instance.Show(index);
+    }
+
+    void OnTriggerExit2D(Collider2D other)
+    {
+        var player = other.GetComponent<PlayerController>();
+        if (player == null) return;
+
+        if (type == TileType.Jelly)
+        {
+            player.ExitJelly();
+            return;
+        }
+
+        if (type == TileType.Plate && playerOnPlate)
+        {
+            playerOnPlate = false;
+            PlateTick();
+        }
+    }
+}
