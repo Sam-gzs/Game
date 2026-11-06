@@ -45,5 +45,3 @@
 | 文档 | 内容 |
 |---|---|
 | `Docs/project-structure.md` | 逐文件作用、文件引用链、可删清单 |
-| `Docs/git-workflow.md` | 程序 × 策划的协作与版本管理规程 |
-| `Docs/jam-review-2026-11-04.md` | 完成度评审、美术音效缺口、一周排期 |
