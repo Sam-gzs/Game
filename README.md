@@ -28,6 +28,18 @@
 - 网格坐标 1 单位 = 1 格，`GridUtil` 负责换算
 - 编辑器工具：`Tools > Grid Painter`（刷格子）、`Tools > Stickman Jump`（建关/造预制体）
 
+## 音频
+
+音频统一走 `Assets/Scripts/AudioManager.cs`：它在启动时自建 `DontDestroyOnLoad` 对象，
+场景里不需要挂任何 AudioSource。
+
+- 音效放 `Assets/Resources/Audio/<id>.wav`，文件名与 `Sfx` 枚举一一对应；新增一条只丢文件，不改代码
+- 主音量复用设置面板（`GameSettings` → `AudioListener.volume`），音频层不再二次衰减
+- BGM：放 `Assets/Resources/Audio/bgm/menu.wav` 与 `bgm/level.wav` 即自动循环
+- 尚缺 7 条素材（`break_wood` `mirror_turn` `bounce` `plate_press` `ball_switch_on` `ball_switch_off` `pickup`），
+  当前用近义音效变调兜底，替换表见 `AudioManager.BuildDefs()`
+- 导入由 `Assets/Editor/AudioImportSettings.cs` 统一设为 PCM / 单声道 / 预加载
+
 ## 文档
 
 | 文档 | 内容 |
