@@ -42,6 +42,7 @@ public class PlayerController : MonoBehaviour
     int jellyContacts;
     public float jellySlow = 0.35f;
     LineRenderer aimLine;
+    bool wasGrounded = true;   // spawn already counts as grounded: no landing thud on level start
 
     public bool Grounded { get; private set; }
     public float SpeedX => rb != null ? rb.linearVelocity.x : 0f;
@@ -142,6 +143,7 @@ public class PlayerController : MonoBehaviour
             jumpBuffer = 0f;
             coyote = 0f;
             Grounded = false;
+            AudioManager.Play(Sfx.Jump);
         }
 
         if (mouse != null)
@@ -150,6 +152,7 @@ public class PlayerController : MonoBehaviour
             {
                 if (!Grounded)
                 {
+                    AudioManager.Play(Sfx.RefuseAirThrow);
                     ToastUI.Show("LAND FIRST  -  no throwing in the air");
                 }
                 else
@@ -192,6 +195,8 @@ public class PlayerController : MonoBehaviour
     void FixedUpdate()
     {
         Grounded = CheckGround();
+        if (Grounded && !wasGrounded) AudioManager.Play(Sfx.Land);
+        wasGrounded = Grounded;
         rb.gravityScale = rb.linearVelocity.y > 0.1f ? riseGravity : fallGravity;
         if (rb.linearVelocity.y < -maxFallSpeed)
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, -maxFallSpeed);
@@ -260,12 +265,14 @@ public class PlayerController : MonoBehaviour
         }
 
         Destroy(box.gameObject);
+        AudioManager.Play(Sfx.Recall);
         ToastUI.Show("BOX RECALLED");
     }
 
     /// <summary>Press R: reload the level (irreversible blocks/stone make this necessary).</summary>
     public void RestartLevel()
     {
+        AudioManager.Play(Sfx.LevelRestart);
         var boot = Object.FindFirstObjectByType<LevelBootstrap>();
         GameFlow.LoadLevel(boot != null ? boot.levelIndex : 0);
     }
@@ -320,6 +327,7 @@ public class PlayerController : MonoBehaviour
         // refractors, sticky blocks and falling blocks are not.
         if (!BoxProjectile.CanSpawnAt(targetCell))
         {
+            AudioManager.Play(Sfx.RefuseBlocked);
             ToastUI.Show(BoxProjectile.IsBoxAt(targetCell)
                 ? "NO ROOM HERE  -  a ball is already there"
                 : "NO ROOM HERE  -  the ball would get stuck");
@@ -327,6 +335,7 @@ public class PlayerController : MonoBehaviour
         }
 
         ThrowCount++;
+        AudioManager.Play(Sfx.Throw);
         return BoxProjectile.Spawn(targetCell, dir, blockSprite, blockMaterial, Mathf.Clamp(power, 1, maxCharge));
     }
 

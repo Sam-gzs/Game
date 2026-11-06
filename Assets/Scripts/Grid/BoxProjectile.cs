@@ -64,6 +64,7 @@ public class BoxProjectile : MonoBehaviour
     bool sliding;
     bool stuck;
     float slideT;
+    bool wasResting;
 
     /// <summary>Refractor cells this box has already used (each one works once per box).</summary>
     readonly System.Collections.Generic.HashSet<Vector2Int> usedRefractors = new System.Collections.Generic.HashSet<Vector2Int>();
@@ -136,6 +137,13 @@ public class BoxProjectile : MonoBehaviour
         return new Color(0.90f, 0.32f, 0.20f, 1f);
     }
 
+    static void PlayBreak(TileType type)
+    {
+        if (type == TileType.Dirt) AudioManager.Play(Sfx.BreakDirt);
+        else if (type == TileType.Wood) AudioManager.Play(Sfx.BreakWood);
+        else AudioManager.Play(Sfx.BreakStone);
+    }
+
     void UpdateSpeedVisual()
     {
         if (sr == null) sr = GetComponent<SpriteRenderer>();
@@ -144,6 +152,9 @@ public class BoxProjectile : MonoBehaviour
 
     void Update()
     {
+        if (Resting && !wasResting && !stuck) AudioManager.Play(Sfx.BallRest);
+        wasResting = Resting;
+
         if (sliding)
         {
             slideT += Time.deltaTime * 18f;
@@ -190,6 +201,7 @@ public class BoxProjectile : MonoBehaviour
             {
                 speedLevel = Mathf.Min(MaxMomentum, speedLevel + 1);
                 UpdateSpeedVisual();
+                AudioManager.PlayBallSpeed(speedLevel);
             }
 
             MoveToCell(next);
@@ -235,6 +247,7 @@ public class BoxProjectile : MonoBehaviour
             {
                 if (speedLevel >= required)
                 {
+                    PlayBreak(tile.type);
                     Destroy(tile.gameObject);
                     speedLevel -= 1;
                     fromPos = transform.position;
@@ -242,7 +255,7 @@ public class BoxProjectile : MonoBehaviour
                     toPos = GridUtil.CellCenter(Cell);
                     t = 0f;
                     UpdateSpeedVisual();
-                    if (speedLevel <= 0 && !stuck) StopHere();
+                    if (speedLevel <= 0 && !stuck) StopHere(false);
                     return;
                 }
 
@@ -272,6 +285,7 @@ public class BoxProjectile : MonoBehaviour
                             followSticky = null;
                         }
 
+                        AudioManager.Play(Sfx.BallPassSticky);
                         fromPos = transform.position;
                         MoveToCell(blockedCell);
                         toPos = GridUtil.CellCenter(Cell);
@@ -279,7 +293,8 @@ public class BoxProjectile : MonoBehaviour
                         return;
                     }
 
-                    StopHere();
+                    AudioManager.Play(Sfx.BallStuck);
+                    StopHere(false);
                     stuck = true;
                     Resting = true;
                     falling = false;
@@ -331,6 +346,7 @@ public class BoxProjectile : MonoBehaviour
                     }
 
                     usedRefractors.Add(blockedCell);
+                    AudioManager.Play(Sfx.BallRefract);
                     Direction = tile.RefractDirection(Direction);
                     speedLevel = Mathf.Max(0, speedLevel - 1); // refraction costs 1 momentum
                     UpdateSpeedVisual();
@@ -346,12 +362,20 @@ public class BoxProjectile : MonoBehaviour
                 // Reflection adds 1 momentum (capped so a loop cannot grow forever).
                 if (tile.type == TileType.Mirror)
                 {
+                    AudioManager.Play(Sfx.MirrorTurn);
                     Direction = tile.RefractDirection(Direction);
                     speedLevel = Mathf.Min(MaxMomentum, speedLevel + 1);
                     UpdateSpeedVisual();
                     fromPos = toPos;
                     t = 0f;
                     return;
+                }
+
+                // A refractor that this ball already used is a plain solid block now.
+                if ((tile.type == TileType.RefractorDown || tile.type == TileType.RefractorUp) &&
+                    usedRefractors.Contains(blockedCell))
+                {
+                    AudioManager.Play(Sfx.RefractorSpent);
                 }
 
                 // Refract blocks: the ball enters and is turned 90 degrees clockwise.
@@ -364,6 +388,7 @@ public class BoxProjectile : MonoBehaviour
                         return;
                     }
 
+                    AudioManager.Play(Sfx.BallRefract);
                     Direction = tile.Refract90Direction(Direction);
                     speedLevel = Mathf.Max(0, speedLevel - 1);
                     UpdateSpeedVisual();
@@ -379,6 +404,7 @@ public class BoxProjectile : MonoBehaviour
 
                 if (tile.type == TileType.Bounce)
                 {
+                    AudioManager.Play(Sfx.Bounce);
                     Direction = -Direction;
                     fromPos = toPos;
                     t = 0f;
@@ -467,7 +493,8 @@ public class BoxProjectile : MonoBehaviour
                 if (t.followBall != null) continue; // a sticky carried by a ball is not an anchor
                 if (!t.IsStickyAnchored()) continue;
 
-                StopHere();
+                AudioManager.Play(Sfx.BallStuck);
+                StopHere(false);
                 stuck = true;
                 Resting = true;
                 falling = false;
@@ -479,8 +506,10 @@ public class BoxProjectile : MonoBehaviour
     }
 
     /// <summary>Park the box in its current cell; it then falls if nothing holds it.</summary>
-    void StopHere()
+    void StopHere(bool blocked = true)
     {
+        if (blocked) AudioManager.Play(Sfx.BallBlocked);
+
         moving = false;
         falling = false;
         Resting = false;

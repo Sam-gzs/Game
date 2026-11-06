@@ -8,6 +8,7 @@ public class LevelBootstrap : MonoBehaviour
     void Start()
     {
         Time.timeScale = 1f;
+        AudioManager.PlayBgm("level");
 
         GridTile spawn = null;
         var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);

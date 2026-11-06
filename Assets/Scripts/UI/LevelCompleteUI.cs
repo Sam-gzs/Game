@@ -47,6 +47,7 @@ public class LevelCompleteUI : MonoBehaviour
 
         if (panel != null) panel.SetActive(true);
         Time.timeScale = 0f;
+        AudioManager.Play(Sfx.LevelClear);
 
         var player = Object.FindFirstObjectByType<PlayerController>();
         if (player != null)
@@ -60,18 +61,21 @@ public class LevelCompleteUI : MonoBehaviour
     public void Retry()
     {
         Time.timeScale = 1f;
+        AudioManager.Play(Sfx.LevelRestart);
         GameFlow.LoadLevel(levelIndex);
     }
 
     public void Levels()
     {
         Time.timeScale = 1f;
+        UiTone.Click();
         GameFlow.LoadMenu();
     }
 
     public void Next()
     {
         Time.timeScale = 1f;
+        UiTone.Click();
         GameFlow.LoadNext(levelIndex);
     }
 }

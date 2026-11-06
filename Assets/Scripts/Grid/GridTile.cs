@@ -93,6 +93,7 @@ public class GridTile : MonoBehaviour
     float fallT;
     Vector3 fallFrom;
     Vector3 fallTo;
+    bool justLanded;
 
     // Sticky block: floats when free, can be pushed/carried by the ball.
     public BoxProjectile followBall;
@@ -101,6 +102,8 @@ public class GridTile : MonoBehaviour
     float stickyFallT;
     Vector3 stickyFrom;
     Vector3 stickyTo;
+    // Starts true: a sticky that is already glued when the level loads must not click.
+    bool gluedToWall = true;
 
     public bool IsFalling => falling;
 
@@ -185,6 +188,7 @@ public class GridTile : MonoBehaviour
                 falling = false;
                 fallT = 0f;
                 transform.position = fallTo;
+                justLanded = true;   // it may still keep falling: resolved on the next tick
             }
             return;
         }
@@ -194,6 +198,7 @@ public class GridTile : MonoBehaviour
         // A cell can hold a button/plate plus the block that dropped into it, so inspect
         // every tile in the cell. A gate occupies two cells and open gates are passable.
         GridTile button = null;
+        bool supported = false;
         var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
         for (int i = 0; i < tiles.Length; i++)
         {
@@ -212,16 +217,26 @@ public class GridTile : MonoBehaviour
             }
 
             if (t.type == TileType.Gate && t.GateOpen) continue; // open gate = hole
-            if (t.type == TileType.Sticky)
-                return; // the sticky decides whether it can move down first (and the block follows)
-
-            return; // a normal tile / closed gate is a floor
+            supported = true; // sticky or a normal tile: either way it holds the block
+            break;
         }
 
         // A thrown box (BoxProjectile) is not a GridTile: the block lands on top of it.
-        if (BoxProjectile.IsBoxAt(below)) return;
+        if (!supported && BoxProjectile.IsBoxAt(below)) supported = true;
+
+        if (supported)
+        {
+            if (justLanded)
+            {
+                justLanded = false;
+                AudioManager.Play(Sfx.FallingLand);
+            }
+            return;
+        }
 
         falling = true;
+        justLanded = false;
+        AudioManager.Play(Sfx.FallingStart);
         fallT = 0f;
         fallFrom = transform.position;
         cell = below;
@@ -333,14 +348,22 @@ public class GridTile : MonoBehaviour
         if (followBall != null) return;
 
         // Moving into a cell that touches a normal brick: it glues there, mid-motion.
-        if (IsStickyAnchored() && (followFalling != null || HasBlockBelow()))
+        bool anchoredNow = IsStickyAnchored() && (followFalling != null || HasBlockBelow());
+        if (anchoredNow)
         {
+            if (!gluedToWall)
+            {
+                gluedToWall = true;
+                AudioManager.Play(Sfx.StickyGlue);
+            }
             followFalling = null;
             stickyFalling = false;
             stickyFallT = 0f;
             transform.position = GridUtil.CellCenter(cell);
             return;
         }
+
+        gluedToWall = false;
 
         if (stickyFalling)
         {
@@ -440,6 +463,7 @@ public class GridTile : MonoBehaviour
         if (Time.time < nextSwitchTime) return;
 
         nextSwitchTime = Time.time + 0.4f;
+        AudioManager.Play(Sfx.SwitchPress);
         GateSystem.Toggle(channel, this);
     }
 
@@ -452,10 +476,12 @@ public class GridTile : MonoBehaviour
 
     public void SetMirrorOpen(bool open)
     {
+        bool changed = mirrorDown != !open;
         mirrorDown = !open;
         if (sr == null) sr = GetComponent<SpriteRenderer>();
         if (sr != null)
             sr.sprite = RefractorSprite(mirrorDown ? TileType.RefractorDown : TileType.RefractorUp);
+        if (changed && Application.isPlaying) AudioManager.Play(Sfx.MirrorTurn);
     }
 
     /// <summary>Mirror/reflect mapping: a 45-degree mirror bounces the ball at its face.</summary>
@@ -538,6 +564,7 @@ public class GridTile : MonoBehaviour
         if (pressed == PlatePressed) return;
 
         PlatePressed = pressed;
+        if (pressed) AudioManager.Play(Sfx.PlatePress);
         RefreshPlateVisual();
         GateSystem.RefreshPlates(channel);
     }
@@ -553,6 +580,7 @@ public class GridTile : MonoBehaviour
 
         SetSwitchState(pressed);
         GateSystem.RefreshButtons(channel);
+        AudioManager.Play(pressed ? Sfx.BallSwitchOn : Sfx.BallSwitchOff);
         Debug.Log($"BallSwitch {cell} ch{channel} -> {(pressed ? "ON" : "OFF")}");
     }
 
@@ -876,11 +904,13 @@ public class GridTile : MonoBehaviour
 
     public void SetGateOpen(bool open)
     {
+        bool changed = GateOpen != open;
         GateOpen = open;
         if (col == null) col = GetComponent<BoxCollider2D>();
         if (col != null) col.enabled = !open;
         if (sr == null) sr = GetComponent<SpriteRenderer>();
         if (sr != null) sr.color = open ? new Color(1f, 1f, 1f, 0.25f) : Color.white;
+        if (changed && Application.isPlaying) AudioManager.Play(open ? Sfx.GateOpen : Sfx.GateClose);
     }
 
     void OnCollisionEnter2D(Collision2D collision)
@@ -981,6 +1011,7 @@ public class GridTile : MonoBehaviour
         // extra-box pickup
         if (type == TileType.Pickup)
         {
+            AudioManager.Play(Sfx.Pickup);
             player.GrantExtraBox();
             Destroy(gameObject);
             return;

@@ -12,6 +12,7 @@ public class MainMenu : MonoBehaviour
     void Awake()
     {
         Time.timeScale = 1f;
+        AudioManager.PlayBgm("menu");
         BuildLevelButtons();
         EnsureSettingsButton();
         Refresh();
@@ -72,6 +73,7 @@ public class MainMenu : MonoBehaviour
 
     public void OpenLevelSelect()
     {
+        UiTone.Click();
         if (mainPanel != null) mainPanel.SetActive(false);
         if (levelPanel != null) levelPanel.SetActive(true);
         Refresh();
@@ -79,6 +81,7 @@ public class MainMenu : MonoBehaviour
 
     public void BackToMain()
     {
+        UiTone.Click();
         if (levelPanel != null) levelPanel.SetActive(false);
         if (mainPanel != null) mainPanel.SetActive(true);
         Refresh();
@@ -86,6 +89,7 @@ public class MainMenu : MonoBehaviour
 
     public void PlayLevel(int index)
     {
+        UiTone.Click();
         GameFlow.LoadLevel(index);
     }
 
