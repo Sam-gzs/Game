@@ -127,14 +127,13 @@ public class BoxProjectile : MonoBehaviour
         return box;
     }
 
+    /// <summary>
+    /// Ball tint = its current momentum. Levels 1..3 come from ChargePalette so the ball
+    /// always matches the POWER bar and the aim dashes.
+    /// </summary>
     static Color SpeedColor(int s)
     {
-        if (s <= 0) return new Color(0.55f, 0.55f, 0.62f, 1f); // spent
-        if (s >= 5) return new Color(0.55f, 0.95f, 1.00f, 1f); // max momentum
-        if (s == 4) return new Color(1f, 0.98f, 0.80f, 1f);
-        if (s == 3) return new Color(1f, 0.88f, 0.35f, 1f);
-        if (s == 2) return new Color(1f, 0.62f, 0.24f, 1f);
-        return new Color(0.90f, 0.32f, 0.20f, 1f);
+        return ChargePalette.ForMomentum(s);
     }
 
     static void PlayBreak(TileType type)
