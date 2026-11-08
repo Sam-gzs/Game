@@ -13,6 +13,13 @@ public class MainMenu : MonoBehaviour
     {
         Time.timeScale = 1f;
         AudioManager.PlayBgm("menu");
+
+        // Title / subtitle / footer / level labels are saved with the built-in font inside
+        // the scene; re-font them here so swapping PixelFont.ttf is the only step needed.
+        // snapSizes: keep every size on the 16px pixel grid (128 / 96 / 48 / 32 / 16).
+        PixelFont.ApplyTo(transform, true);
+        PixelFont.OutlineBigText(transform);
+
         BuildLevelButtons();
         EnsureSettingsButton();
         Refresh();
@@ -122,8 +129,8 @@ public class MainMenu : MonoBehaviour
             int col = i % columns;
             int row = i / columns;
 
-            var btn = UIFactory.MakeButton(levelPanel.transform, "LevelButton" + (i + 1), "LEVEL " + (i + 1),
-                new Vector2(0.5f, 0.70f), new Vector2(300f, 120f), new Color(0.12f, 0.14f, 0.20f), 30, Color.white);
+            var btn = UIFactory.MakeButton(levelPanel.transform, "LevelButton" + (i + 1), "第 " + (i + 1) + " 关",
+                new Vector2(0.5f, 0.70f), new Vector2(300f, 120f), new Color(0.12f, 0.14f, 0.20f), 32, Color.white);
             ((RectTransform)btn.transform).anchoredPosition = new Vector2((col - (columns - 1) * 0.5f) * 340f, -row * 140f);
 
             int index = i;
@@ -141,7 +148,8 @@ public class MainMenu : MonoBehaviour
         for (int i = 0; i < levelLabels.Length; i++)
         {
             if (levelLabels[i] == null) continue;
-            levelLabels[i].text = "LEVEL " + (i + 1) + (GameFlow.IsCleared(i) ? "\n<size=22>CLEARED</size>" : "");
+            levelLabels[i].text = "第 " + (i + 1) + " 关" +
+                                  (GameFlow.IsCleared(i) ? "\n<size=" + PixelFont.PixelUnit + ">已通关</size>" : "");
         }
     }
 }

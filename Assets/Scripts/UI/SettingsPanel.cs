@@ -274,26 +274,26 @@ public class SettingsPanel : MonoBehaviour
             new Vector2(420f, 44f));
         sliderRect = (RectTransform)volumeSlider.transform;
 
-        volumeValue = UIFactory.Label(card, "VolumeValue", "80%", 30, Muted, TextAnchor.MiddleRight,
+        volumeValue = UIFactory.Label(card, "VolumeValue", "80%", 32, Muted, TextAnchor.MiddleRight,
             new Vector2(0.5f, 0.5f), new Vector2(100f, 44f), new Vector2(300f, 0f));
         volumeValueRect = volumeValue.rectTransform;
 
         resumeButton = UIFactory.MakeButton(card, "ResumeButton", "继续游戏",
-            new Vector2(0.5f, 0.5f), new Vector2(ButtonWidth, ButtonHeight), ButtonColor, 34, Color.white);
+            new Vector2(0.5f, 0.5f), new Vector2(ButtonWidth, ButtonHeight), ButtonColor, 32, Color.white);
         resumeRect = (RectTransform)resumeButton.transform;
         resumeButton.onClick.AddListener(OnResume);
 
         restartButton = UIFactory.MakeButton(card, "RestartButton", "重开本关",
-            new Vector2(0.5f, 0.5f), new Vector2(ButtonWidth, ButtonHeight), ButtonColor, 34, Color.white);
+            new Vector2(0.5f, 0.5f), new Vector2(ButtonWidth, ButtonHeight), ButtonColor, 32, Color.white);
         restartRect = (RectTransform)restartButton.transform;
         restartButton.onClick.AddListener(OnRestart);
 
         menuButton = UIFactory.MakeButton(card, "MenuButton", "返回主菜单",
-            new Vector2(0.5f, 0.5f), new Vector2(ButtonWidth, ButtonHeight), QuitColor, 34, Color.white);
+            new Vector2(0.5f, 0.5f), new Vector2(ButtonWidth, ButtonHeight), QuitColor, 32, Color.white);
         menuRect = (RectTransform)menuButton.transform;
         menuButton.onClick.AddListener(OnBackToMenu);
 
-        hintLabel = UIFactory.Label(card, "Hint", "按 ESC 关闭", 24,
+        hintLabel = UIFactory.Label(card, "Hint", "按 ESC 关闭", 16,
             new Color(0.55f, 0.62f, 0.75f, 0.85f), TextAnchor.MiddleCenter,
             new Vector2(0.5f, 0.5f), new Vector2(600f, 34f), Vector2.zero);
         hintRect = hintLabel.rectTransform;

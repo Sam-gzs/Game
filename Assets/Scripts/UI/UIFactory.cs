@@ -97,7 +97,8 @@ public static class UIFactory
         rt.anchoredPosition = offset;
 
         var t = rt.gameObject.AddComponent<Text>();
-        t.font = BuiltinFont;
+        // PixelFont.Get() already falls back to the built-in font when no pixel font is installed.
+        t.font = PixelFont.Get();
         t.fontSize = fontSize;
         t.text = text;
         t.color = color;

@@ -20,6 +20,22 @@ public class LevelCompleteUI : MonoBehaviour
     {
         Instance = this;
         if (panel != null) panel.SetActive(false);
+
+        // The panel is baked into every level scene with the built-in font: pull it onto the
+        // pixel font and the pixel grid here instead of editing six scenes by hand.
+        if (panel != null) PixelFont.ApplyTo(panel.transform, true);
+        if (panel != null) PixelFont.OutlineBigText(panel.transform);
+
+        SetButtonLabel(retryButton, "重试");
+        SetButtonLabel(levelsButton, "选关");
+        SetButtonLabel(nextButton, "下一关");
+    }
+
+    static void SetButtonLabel(Button button, string text)
+    {
+        if (button == null) return;
+        var label = button.GetComponentInChildren<Text>(true);
+        if (label != null) label.text = text;
     }
 
     void OnDestroy()
@@ -41,8 +57,8 @@ public class LevelCompleteUI : MonoBehaviour
 
         GameFlow.MarkCleared(index);
 
-        if (titleText != null) titleText.text = "LEVEL " + (index + 1) + " CLEARED";
-        if (hintText != null) hintText.text = "you launched the stickman to the top";
+        if (titleText != null) titleText.text = "第 " + (index + 1) + " 关 完成";
+        if (hintText != null) hintText.text = string.Empty;   // 不要副标题，只留关卡标题
         if (nextButton != null) nextButton.gameObject.SetActive(index + 1 < GameFlow.LevelCount);
 
         if (panel != null) panel.SetActive(true);

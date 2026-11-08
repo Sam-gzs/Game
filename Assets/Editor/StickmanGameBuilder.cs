@@ -458,21 +458,19 @@ public static class StickmanGameBuilder
         Transform root = canvas.transform;
 
         var mainBg = UIFactory.FullScreen(root, "MainPanel", Backdrop);
-        UIFactory.Label(mainBg.transform, "Title", "STICKMAN BOUNCE", 96, Color.white, TextAnchor.MiddleCenter,
+        UIFactory.Label(mainBg.transform, "Title", "这是一个标题", 128, Color.white, TextAnchor.MiddleCenter,
             new Vector2(0.5f, 0.70f), new Vector2(1700f, 200f), Vector2.zero);
-        UIFactory.Label(mainBg.transform, "Subtitle", "throw a box  ·  bounce it off a cyan brick  ·  launch yourself",
-            30, Muted, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.585f), new Vector2(1700f, 60f), Vector2.zero);
 
-        var startBtn = UIFactory.MakeButton(mainBg.transform, "StartButton", "START", new Vector2(0.5f, 0.40f),
-            new Vector2(420f, 96f), Accent, 40, DarkText);
-        var quitBtn = UIFactory.MakeButton(mainBg.transform, "QuitButton", "QUIT", new Vector2(0.5f, 0.27f),
+        var startBtn = UIFactory.MakeButton(mainBg.transform, "StartButton", "开始游戏", new Vector2(0.5f, 0.40f),
+            new Vector2(420f, 96f), Accent, 48, DarkText);
+        var quitBtn = UIFactory.MakeButton(mainBg.transform, "QuitButton", "退出", new Vector2(0.5f, 0.27f),
             new Vector2(420f, 72f), Slate, 32, Color.white);
 
-        UIFactory.Label(mainBg.transform, "Footer", "A / D  move      SPACE  jump      LEFT MOUSE  throw box", 24,
+        UIFactory.Label(mainBg.transform, "Footer", "A / D  移动      SPACE  跳跃      左键  投掷", 32,
             Muted, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.09f), new Vector2(1700f, 40f), Vector2.zero);
 
         var levelBg = UIFactory.FullScreen(root, "LevelPanel", Backdrop);
-        UIFactory.Label(levelBg.transform, "Title", "SELECT LEVEL", 72, Color.white, TextAnchor.MiddleCenter,
+        UIFactory.Label(levelBg.transform, "Title", "选择关卡", 96, Color.white, TextAnchor.MiddleCenter,
             new Vector2(0.5f, 0.73f), new Vector2(1200f, 120f), Vector2.zero);
 
         var levelButtons = new Button[GameFlow.LevelCount];
@@ -484,8 +482,8 @@ public static class StickmanGameBuilder
             int col = i % columns;
             int row = i / columns;
 
-            var btn = UIFactory.MakeButton(levelBg.transform, "LevelButton" + (i + 1), "LEVEL " + (i + 1),
-                new Vector2(0.5f, 0.70f), new Vector2(300f, 120f), Card, 30, Color.white);
+            var btn = UIFactory.MakeButton(levelBg.transform, "LevelButton" + (i + 1), "第 " + (i + 1) + " 关",
+                new Vector2(0.5f, 0.70f), new Vector2(300f, 120f), Card, 32, Color.white);
 
             float x = (col - (columns - 1) * 0.5f) * 340f;
             float y = -row * 140f;
@@ -495,8 +493,8 @@ public static class StickmanGameBuilder
             levelTexts[i] = btn.GetComponentInChildren<Text>();
         }
 
-        var backBtn = UIFactory.MakeButton(levelBg.transform, "BackButton", "BACK", new Vector2(0.5f, 0.10f),
-            new Vector2(280f, 70f), Slate, 30, Color.white);
+        var backBtn = UIFactory.MakeButton(levelBg.transform, "BackButton", "返回", new Vector2(0.5f, 0.10f),
+            new Vector2(280f, 70f), Slate, 32, Color.white);
         levelBg.gameObject.SetActive(false);
 
         var menu = canvas.gameObject.AddComponent<MainMenu>();
@@ -535,21 +533,21 @@ public static class StickmanGameBuilder
         var overlay = UIFactory.FullScreen(canvas.transform, "CompletePanel", new Color(0f, 0f, 0f, 0.72f));
         var card = UIFactory.Box(overlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(900f, 520f), Card);
 
-        var title = UIFactory.Label(card.transform, "Title", "LEVEL " + (index + 1) + " CLEARED", 68, Color.white,
+        var title = UIFactory.Label(card.transform, "Title", "第 " + (index + 1) + " 关 完成", 64, Color.white,
             TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(820f, 120f), new Vector2(0f, 130f));
-        var hint = UIFactory.Label(card.transform, "Hint", "you cleared the room", 28, Muted,
+        var hint = UIFactory.Label(card.transform, "Hint", "", 32, Muted,
             TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(820f, 60f), new Vector2(0f, 48f));
 
-        var retryBtn = UIFactory.MakeButton(card.transform, "RetryButton", "RETRY", new Vector2(0.5f, 0.5f),
-            new Vector2(240f, 84f), Slate, 30, Color.white);
+        var retryBtn = UIFactory.MakeButton(card.transform, "RetryButton", "重试", new Vector2(0.5f, 0.5f),
+            new Vector2(240f, 84f), Slate, 32, Color.white);
         ((RectTransform)retryBtn.transform).anchoredPosition = new Vector2(-270f, -110f);
 
-        var levelsBtn = UIFactory.MakeButton(card.transform, "LevelsButton", "LEVELS", new Vector2(0.5f, 0.5f),
-            new Vector2(240f, 84f), Slate, 30, Color.white);
+        var levelsBtn = UIFactory.MakeButton(card.transform, "LevelsButton", "选关", new Vector2(0.5f, 0.5f),
+            new Vector2(240f, 84f), Slate, 32, Color.white);
         ((RectTransform)levelsBtn.transform).anchoredPosition = new Vector2(0f, -110f);
 
-        var nextBtn = UIFactory.MakeButton(card.transform, "NextButton", "NEXT", new Vector2(0.5f, 0.5f),
-            new Vector2(240f, 84f), Accent, 30, DarkText);
+        var nextBtn = UIFactory.MakeButton(card.transform, "NextButton", "下一关", new Vector2(0.5f, 0.5f),
+            new Vector2(240f, 84f), Accent, 32, DarkText);
         ((RectTransform)nextBtn.transform).anchoredPosition = new Vector2(270f, -110f);
 
         var complete = canvas.gameObject.AddComponent<LevelCompleteUI>();
