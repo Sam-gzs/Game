@@ -268,7 +268,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: A / D  移动      SPACE  跳跃      左键  投掷
+  m_Text: 
 --- !u!222 &8829780
 CanvasRenderer:
   m_ObjectHideFlags: 0

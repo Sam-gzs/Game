@@ -466,9 +466,6 @@ public static class StickmanGameBuilder
         var quitBtn = UIFactory.MakeButton(mainBg.transform, "QuitButton", "退出", new Vector2(0.5f, 0.27f),
             new Vector2(420f, 72f), Slate, 32, Color.white);
 
-        UIFactory.Label(mainBg.transform, "Footer", "A / D  移动      SPACE  跳跃      左键  投掷", 32,
-            Muted, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.09f), new Vector2(1700f, 40f), Vector2.zero);
-
         var levelBg = UIFactory.FullScreen(root, "LevelPanel", Backdrop);
         UIFactory.Label(levelBg.transform, "Title", "选择关卡", 96, Color.white, TextAnchor.MiddleCenter,
             new Vector2(0.5f, 0.73f), new Vector2(1200f, 120f), Vector2.zero);
