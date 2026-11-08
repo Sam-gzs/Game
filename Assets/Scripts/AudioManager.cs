@@ -84,10 +84,32 @@ public static class AudioManager
     // boot
     // ------------------------------------------------------------------
 
+    /// <summary>
+    /// The project runs with "Reload Domain" OFF (EditorSettings.m_EnterPlayModeOptions = 1),
+    /// so statics survive from the previous play session while every AudioSource of that
+    /// session has been destroyed. Without this reset the first sound of the new session
+    /// touches a destroyed voice and throws MissingReferenceException.
+    /// </summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics()
+    {
+        defs = null;
+        clips = null;
+        usingFallback = null;
+        resolved = null;
+        lastPlay = null;
+        voices = null;
+        bgmSource = null;
+        bgmName = null;
+        booted = false;
+        cursor = 0;
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void Boot()
     {
-        if (booted) return;
+        // Rebuild when the pool from a previous session is gone, not just when booted == false.
+        if (booted && voices != null && voices.Length > 0 && voices[0] != null) return;
         booted = true;
 
         BuildDefs();
@@ -215,6 +237,7 @@ public static class AudioManager
 
         lastPlay[i] = now;
         AudioSource src = NextVoice();
+        if (src == null) return;   // pool could not be rebuilt: stay silent, never throw
         src.Stop();
         src.clip = clip;
         src.volume = Mathf.Clamp01(d.volume * volMul * volume);
@@ -285,15 +308,25 @@ public static class AudioManager
         return n;
     }
 
+    /// <summary>Rebuild the voice pool if it was destroyed from under us.</summary>
+    static void EnsureVoices()
+    {
+        if (voices != null && voices.Length > 0 && voices[0] != null) return;
+        Boot();
+    }
+
     static AudioSource NextVoice()
     {
+        EnsureVoices();
+
         for (int i = 0; i < voices.Length; i++)
         {
             int k = (cursor + i) % voices.Length;
-            if (!voices[k].isPlaying)
+            var v = voices[k];
+            if (v != null && !v.isPlaying)
             {
                 cursor = (k + 1) % voices.Length;
-                return voices[k];
+                return v;
             }
         }
 
