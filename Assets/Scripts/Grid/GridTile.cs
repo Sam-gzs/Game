@@ -82,8 +82,8 @@ public class GridTile : MonoBehaviour
     float springHitTimer;
     const float SpringHitTime = 0.10f;
 
-    /// <summary>Temporary: log why a sticky starts falling / glues. Turn off once the bug is found.</summary>
-    public const bool TraceSticky = true;
+    /// <summary>Temporary: log why a sticky starts falling / glues / is released. Off by default.</summary>
+    public const bool TraceSticky = false;
 
     [Header("Cat trigger (TileType.CatTrigger)")]
     [Tooltip("Who can set this trigger off. The cat is allowed too, for levels where it has to reach one.")]
