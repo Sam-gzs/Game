@@ -105,7 +105,6 @@ public class GridTile : MonoBehaviour
     public bool GateOpen { get; private set; }
     public bool PlatePressed { get; private set; }
     float nextSwitchTime;
-    bool playerOnPlate;
 
     public static readonly Color SolidColor = new Color(0.20f, 0.23f, 0.31f, 1f);
     public static readonly Color SolidEdge = new Color(0.36f, 0.43f, 0.58f, 1f);
@@ -673,7 +672,7 @@ public class GridTile : MonoBehaviour
 
     void PlateTick()
     {
-        bool pressed = playerOnPlate || BoxProjectile.IsBoxAt(cell) || HasFallingAt(cell);
+        bool pressed = BoxProjectile.IsBoxAt(cell) || HasFallingAt(cell);
         if (pressed == PlatePressed) return;
 
         PlatePressed = pressed;
@@ -922,7 +921,6 @@ public class GridTile : MonoBehaviour
                 col.size = Vector2.one;
                 col.offset = Vector2.zero;
                 PlatePressed = false;
-                playerOnPlate = false;
                 RefreshPlateVisual();
                 break;
             case TileType.Pickup:
@@ -1120,13 +1118,9 @@ public class GridTile : MonoBehaviour
         if (changed && Application.isPlaying) AudioManager.Play(open ? Sfx.GateOpen : Sfx.GateClose);
     }
 
-    void OnCollisionEnter2D(Collision2D collision)
-    {
-        if (type != TileType.Switch) return;
-        if (collision.collider.GetComponent<PlayerController>() == null) return;
-
-        PressButton();
-    }
+    // The player deliberately cannot operate switches: buttons, ball switches and plates are
+    // all driven by the thrown ball and by falling blocks only. There is no player-side
+    // OnCollisionEnter2D / OnTriggerEnter2D path into PressButton() or PlateTick() any more.
 
 #if UNITY_EDITOR
     void OnDrawGizmos()
@@ -1210,16 +1204,9 @@ public class GridTile : MonoBehaviour
             return;
         }
 
-        // pressure plate: pressed while the player stands in its cell
-        if (type == TileType.Plate)
-        {
-            if (!playerOnPlate)
-            {
-                playerOnPlate = true;
-                PlateTick();
-            }
-            return;
-        }
+        // pressure plate: the player standing on it does nothing - only a ball or a falling
+        // block presses it (see PlateTick). Kept as an early out so nothing below runs.
+        if (type == TileType.Plate) return;
 
         // extra-box pickup
         if (type == TileType.Pickup)
@@ -1247,12 +1234,6 @@ public class GridTile : MonoBehaviour
         {
             player.ExitJelly();
             return;
-        }
-
-        if (type == TileType.Plate && playerOnPlate)
-        {
-            playerOnPlate = false;
-            PlateTick();
         }
     }
 }
