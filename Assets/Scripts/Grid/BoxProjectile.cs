@@ -392,6 +392,8 @@ public class BoxProjectile : MonoBehaviour
 
                     tile.AttachTo(this);
                     followStickyAhead = true;
+                    if (GridTile.TraceSticky)
+                        Debug.Log($"[Sticky] PUSH {tile.cell} -> {ahead} dir {dir} speed {speedLevel}");
                     fromPos = transform.position;
                     MoveToCell(blockedCell);
                     toPos = GridUtil.CellCenter(Cell);

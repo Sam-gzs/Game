@@ -82,6 +82,9 @@ public class GridTile : MonoBehaviour
     float springHitTimer;
     const float SpringHitTime = 0.10f;
 
+    /// <summary>Temporary: log why a sticky starts falling / glues. Turn off once the bug is found.</summary>
+    public const bool TraceSticky = true;
+
     [Header("Cat trigger (TileType.CatTrigger)")]
     [Tooltip("Who can set this trigger off. The cat is allowed too, for levels where it has to reach one.")]
     public CatTriggerActor catTriggerActor = CatTriggerActor.Player;
@@ -487,6 +490,11 @@ public class GridTile : MonoBehaviour
         if (followFalling.cell == cell + Vector2Int.down) return;       // let it move first
         if (!CanStickyFall()) return;
 
+        if (TraceSticky)
+            Debug.Log($"[Sticky] FALL {cell} -> {cell + Vector2Int.down} | dragFrom={followFalling.cell} " +
+                      $"dragIsFalling={followFalling.IsFalling} | followBall={(followBall != null ? "yes" : "no")} " +
+                      $"anchored={IsStickyAnchored()} below={HasBlockBelow()}");
+
         stickyFalling = true;
         stickyFallT = 0f;
         stickyFrom = transform.position;
@@ -505,6 +513,8 @@ public class GridTile : MonoBehaviour
         // While being carried, touching a normal brick glues it mid-motion.
         if (IsStickyAnchored())
         {
+            if (TraceSticky)
+                Debug.Log($"[Sticky] DETACH at {newCell} (touches a brick) followBall={(followBall != null ? "yes" : "no")}");
             followFalling = null;
             if (followBall != null)
             {
