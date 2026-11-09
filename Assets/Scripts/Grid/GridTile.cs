@@ -68,6 +68,14 @@ public class GridTile : MonoBehaviour
     [Tooltip("Gate: invert its state (open while the channel is off).")]
     public bool invert;
 
+    [Tooltip("Switch / BallSwitch: the state this switch counts as at level start. It is still " +
+             "drawn as the unactivated (red/brown) button, so a start-pressed switch holds its " +
+             "gate open while looking like nothing is pressed.")]
+    public bool startPressed;
+
+    /// <summary>Ball switch: has a ball ever been inside? Until it has, startPressed keeps holding.</summary>
+    bool ballSwitchSeenBall;
+
     [Tooltip("Mirror: true = '\\', false = '/'. A channel signal sets it to '/' when on.")]
     public bool mirrorDown = true;
 
@@ -686,7 +694,12 @@ public class GridTile : MonoBehaviour
     /// </summary>
     void BallSwitchTick()
     {
-        bool pressed = BoxProjectile.IsBoxAt(cell);
+        bool hasBall = BoxProjectile.IsBoxAt(cell);
+        if (hasBall) ballSwitchSeenBall = true;
+
+        // "Starts pressed" means it behaves as if a ball were already resting on it, until the
+        // first ball actually shows up. After that it is a plain occupancy switch again.
+        bool pressed = hasBall || (startPressed && !ballSwitchSeenBall);
         if (pressed == SwitchOn) return;
 
         SetSwitchState(pressed);
@@ -887,10 +900,10 @@ public class GridTile : MonoBehaviour
             case TileType.Switch:
                 sr.enabled = true;
                 sr.color = Color.white;
-                sr.sprite = ResourceSprite("SwitchOff");
+                sr.sprite = ResourceSprite("SwitchOff");   // always looks unactivated at start
                 col.enabled = true;
                 col.isTrigger = false;
-                SwitchOn = false;
+                SwitchOn = startPressed;                   // ... whatever it counts as
                 break;
             case TileType.BallSwitch:
                 sr.enabled = true;
@@ -900,7 +913,7 @@ public class GridTile : MonoBehaviour
                 // no physical presence at all: the player, ball and falling blocks all pass
                 col.enabled = false;
                 col.isTrigger = true;
-                SwitchOn = false;
+                SwitchOn = startPressed;
                 break;
             case TileType.Gate:
                 sr.enabled = true;

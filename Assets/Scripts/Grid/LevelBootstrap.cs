@@ -10,6 +10,9 @@ public class LevelBootstrap : MonoBehaviour
         Time.timeScale = 1f;
         AudioManager.PlayBgm("level");
 
+        // Switches that count as pressed from the first frame open their gate before play starts.
+        GateSystem.ApplyStartStates();
+
         GridTile spawn = null;
         var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
         float minX = float.MaxValue, maxX = float.MinValue;
