@@ -306,18 +306,28 @@ public class GridTile : MonoBehaviour
         return false;
     }
 
-    static bool IsStickyPassable(TileType t)
+    /// <summary>Buttons / plates / ball switches: no body at all, anything may pass through.</summary>
+    static bool IsButtonLike(TileType t)
     {
-        return t == TileType.Jelly || t == TileType.Switch || t == TileType.Plate ||
-               t == TileType.BallSwitch || t == TileType.TriggerPlayer ||
-               t == TileType.TriggerBall || t == TileType.TextAnchor;
+        return t == TileType.Switch || t == TileType.Plate || t == TileType.BallSwitch;
     }
 
-    /// <summary>Is there a solid block directly below the sticky? Jelly/buttons/plates/open gates do not count.</summary>
+    static bool IsStickyPassable(TileType t)
+    {
+        return t == TileType.Jelly || IsButtonLike(t) ||
+               t == TileType.TriggerPlayer || t == TileType.TriggerBall ||
+               t == TileType.TextAnchor;
+    }
+
+    /// <summary>
+    /// Is there a solid block directly below the sticky? Jelly/buttons/plates/open gates do not
+    /// count, and neither does the ball that is parked on a button - see below.
+    /// </summary>
     public bool HasBlockBelow()
     {
         Vector2Int belowCell = cell + Vector2Int.down;
         var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        bool buttonCell = false;
         for (int i = 0; i < tiles.Length; i++)
         {
             var t = tiles[i];
@@ -325,9 +335,18 @@ public class GridTile : MonoBehaviour
 
             if (t.type == TileType.Falling) continue; // a moving falling block is not a support
             if (t.type == TileType.Gate && t.GateOpen) continue;
-            if (IsStickyPassable(t.type)) continue;
+            if (IsStickyPassable(t.type))
+            {
+                if (IsButtonLike(t.type)) buttonCell = true;
+                continue;
+            }
             return true;
         }
+
+        // A button cell is a hole for slime, full stop. A ball sitting on a ball-switch is only
+        // there to hold that switch, so it must not turn the cell into a floor either: otherwise
+        // the switch (via its cat) silently bends a sticky block that is falling through it.
+        if (buttonCell) return false;
 
         return BoxProjectile.IsBoxAt(belowCell);
     }
