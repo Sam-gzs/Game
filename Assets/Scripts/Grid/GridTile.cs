@@ -680,21 +680,23 @@ public class GridTile : MonoBehaviour
                 col.isTrigger = false;
                 break;
             case TileType.Stone:
-                sr.color = StoneColor;
+                sr.sprite = ResourceSprite("BlockStone");
+                sr.color = new Color(0.72f, 0.74f, 0.78f, 1f);
                 sr.enabled = true;
                 col.enabled = true;
                 col.isTrigger = false;
                 break;
             case TileType.Wood:
-                sr.color = WoodColor;
+                sr.sprite = ResourceSprite("BlockWood");
+                sr.color = Color.white;
                 sr.enabled = true;
                 col.enabled = true;
                 col.isTrigger = false;
                 break;
             case TileType.Refract:
                 sr.enabled = true;
-                sr.color = RefractColor;
-                sr.sprite = ResourceSprite("Refract90");
+                sr.color = Color.white;
+                sr.sprite = ResourceSprite("BlockRefract90");
                 col.enabled = true;
                 col.isTrigger = false;
                 break;
@@ -726,7 +728,8 @@ public class GridTile : MonoBehaviour
                 col.isTrigger = false;
                 break;
             case TileType.Dirt:
-                sr.color = DirtColor;
+                sr.sprite = ResourceSprite("BlockDirt");
+                sr.color = new Color(0.85f, 0.62f, 0.45f, 1f);
                 sr.enabled = true;
                 col.enabled = true;
                 col.isTrigger = false;
@@ -865,10 +868,10 @@ public class GridTile : MonoBehaviour
     {
         if (t == TileType.RefractorDown)
         {
-            if (s_refractDown == null) s_refractDown = Resources.Load<Sprite>("RefractDown");
+            if (s_refractDown == null) s_refractDown = Resources.Load<Sprite>("BlockRefractDown");
             return s_refractDown;
         }
-        if (s_refractUp == null) s_refractUp = Resources.Load<Sprite>("RefractUp");
+        if (s_refractUp == null) s_refractUp = Resources.Load<Sprite>("BlockRefractUp");
         return s_refractUp;
     }
 

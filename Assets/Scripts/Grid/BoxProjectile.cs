@@ -56,6 +56,19 @@ public class BoxProjectile : MonoBehaviour
     bool followStickyAhead;
 
     SpriteRenderer sr;
+
+    // The cat is the ball's skin: idle frames while it is parked, roll frames while it moves.
+    Sprite[] catIdle;
+    Sprite[] catRoll;
+    float catAnim;
+    float catIdleAnim;
+
+    [Tooltip("The cat art's forward is 90 degrees off the movement vector; adjust if needed.")]
+    public float rollAngleOffset = -90f;
+
+    [Tooltip("World-space diameter of the cat ball. Keep it equal to CatCompanion.catHeight so the stopped cat and the cat block match.")]
+    public float catBallSize = 1.0f;
+
     Vector3 fromPos;
     Vector3 toPos;
     float t;
@@ -99,13 +112,22 @@ public class BoxProjectile : MonoBehaviour
         go.transform.position = new Vector3(center.x, center.y, 0f);
 
         var ballSprite = Resources.Load<Sprite>("Ball");
-        if (ballSprite != null) sprite = ballSprite;
 
-        var sr = go.AddComponent<SpriteRenderer>();
-        sr.sprite = sprite;
-        if (material != null) sr.sharedMaterial = material;
-        sr.color = SpeedColor(power);
-        sr.sortingOrder = 6;
+        // The cat itself is the ball: the renderer lives on a child so the collider,
+        // the rigidbody and the logical cell stay on the root object.
+        var catGo = new GameObject("CatVisual");
+        catGo.transform.SetParent(go.transform, false);
+        var csr = catGo.AddComponent<SpriteRenderer>();
+        csr.sortingOrder = 6;
+        if (material != null) csr.sharedMaterial = material;
+
+        var idle = LoadSequence("CatIdle", 6);
+        var roll = LoadSequence("CatRoll", 20);
+        Sprite first = idle.Length > 0 ? idle[0] : (roll.Length > 0 ? roll[0] : ballSprite);
+        if (first == null) first = sprite;
+        csr.sprite = first;
+        csr.color = Color.white;
+        catGo.transform.localScale = Vector3.one;
 
         var body = go.AddComponent<Rigidbody2D>();
         body.bodyType = RigidbodyType2D.Kinematic;
@@ -120,11 +142,27 @@ public class BoxProjectile : MonoBehaviour
         box.fromPos = box.toPos = go.transform.position;
         box.speedLevel = Mathf.Clamp(power, 1, 3);
         box.moving = true;
+        box.sr = csr;
+        box.catIdle = idle;
+        box.catRoll = roll;
+        box.SetCatScale(first);
         box.PressButtonAt(cell);
         box.ApplyJellyAt(cell);
         box.CheckStickyContact();
 
         return box;
+    }
+
+    static Sprite[] LoadSequence(string prefix, int max)
+    {
+        var list = new System.Collections.Generic.List<Sprite>();
+        for (int i = 0; i < max; i++)
+        {
+            var s = Resources.Load<Sprite>(prefix + "_" + i);
+            if (s == null) break;
+            list.Add(s);
+        }
+        return list.ToArray();
     }
 
     static Color SpeedColor(int s)
@@ -144,14 +182,53 @@ public class BoxProjectile : MonoBehaviour
         else AudioManager.Play(Sfx.BreakStone);
     }
 
+    void SetCatScale(Sprite s)
+    {
+        if (sr == null || s == null) return;
+        float h = s.rect.height / Mathf.Max(1f, s.pixelsPerUnit);
+        float k = catBallSize / Mathf.Max(0.001f, h);
+        sr.transform.localScale = new Vector3(k, k, 1f);
+    }
+
     void UpdateSpeedVisual()
     {
         if (sr == null) sr = GetComponent<SpriteRenderer>();
-        if (sr != null) sr.color = SpeedColor(speedLevel);
+        // The cat art is already coloured: tinting it by momentum would just muddy it.
+        if (sr != null) sr.color = Color.white;
+    }
+
+    void UpdateCatVisual()
+    {
+        if (sr == null) return;
+
+        bool active = moving || falling || sliding;
+        if (active && catRoll != null && catRoll.Length > 0)
+        {
+            float speed = Mathf.Lerp(9f, 18f, Mathf.Clamp01(speedLevel / 5f));
+            catAnim += Time.deltaTime * speed;
+            int f = Mathf.Abs(Mathf.FloorToInt(catAnim)) % catRoll.Length;
+            sr.sprite = catRoll[f];
+            SetCatScale(sr.sprite);
+
+            float ax = Mathf.Abs(Direction.x);
+            float angle = Mathf.Atan2(Direction.y, ax) * Mathf.Rad2Deg + rollAngleOffset;
+            sr.transform.localRotation = Quaternion.Euler(0f, 0f, angle);
+            sr.flipX = Direction.x < 0f;
+        }
+        else if (catIdle != null && catIdle.Length > 0)
+        {
+            catIdleAnim += Time.deltaTime;
+            int f = Mathf.Abs(Mathf.FloorToInt(catIdleAnim * 2f)) % catIdle.Length;
+            sr.sprite = catIdle[f];
+            SetCatScale(sr.sprite);
+            sr.transform.localRotation = Quaternion.identity;
+        }
     }
 
     void Update()
     {
+        UpdateCatVisual();
+
         if (Resting && !wasResting && !stuck) AudioManager.Play(Sfx.BallRest);
         wasResting = Resting;
 

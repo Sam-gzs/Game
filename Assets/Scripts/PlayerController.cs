@@ -43,6 +43,7 @@ public class PlayerController : MonoBehaviour
     public float jellySlow = 0.35f;
     LineRenderer aimLine;
     bool wasGrounded = true;   // spawn already counts as grounded: no landing thud on level start
+    CatCompanion cat;
 
     public bool Grounded { get; private set; }
     public float SpeedX => rb != null ? rb.linearVelocity.x : 0f;
@@ -69,6 +70,10 @@ public class PlayerController : MonoBehaviour
         rb.freezeRotation = true;
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+
+        // The cat is the ball's skin: it wanders beside the player and becomes the ball on throw.
+        cat = GetComponent<CatCompanion>();
+        if (cat == null) cat = gameObject.AddComponent<CatCompanion>();
 
         // Rounded feet/shoulders: a square box catches on the seam between two floor tiles.
         // NOTE: BoxCollider2D.edgeRadius grows the shape OUTWARDS, so the inner size has to be
@@ -311,6 +316,9 @@ public class PlayerController : MonoBehaviour
             return null;
         }
 
+        // The cat is still running back / morphing into the ball.
+        if (cat != null && cat.IsBusy) return null;
+
         // capacity is 1 by default; an extra-box pickup raises it
         if (BoxProjectile.Count >= boxCapacity) return null;
 
@@ -336,7 +344,14 @@ public class PlayerController : MonoBehaviour
 
         ThrowCount++;
         AudioManager.Play(Sfx.Throw);
-        return BoxProjectile.Spawn(targetCell, dir, blockSprite, blockMaterial, Mathf.Clamp(power, 1, maxCharge));
+        int finalPower = Mathf.Clamp(power, 1, maxCharge);
+        if (cat != null)
+        {
+            // The cat snaps to the player's hand, curls into a ball, then the ball is spawned.
+            cat.BeginThrow(targetCell, dir, finalPower);
+            return null;
+        }
+        return BoxProjectile.Spawn(targetCell, dir, blockSprite, blockMaterial, finalPower);
     }
 
     // ---------------------------------------------------------------------
