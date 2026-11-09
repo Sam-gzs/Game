@@ -440,7 +440,8 @@ public class BoxProjectile : MonoBehaviour
                 // Reflection adds 1 momentum (capped so a loop cannot grow forever).
                 if (tile.type == TileType.Mirror)
                 {
-                    AudioManager.Play(Sfx.MirrorTurn);
+                    AudioManager.Play(Sfx.Bounce);   // it is a spring now: boing, not a mirror turn
+                    tile.SpringHit();
                     Direction = tile.RefractDirection(Direction);
                     speedLevel = Mathf.Min(MaxMomentum, speedLevel + 1);
                     UpdateSpeedVisual();

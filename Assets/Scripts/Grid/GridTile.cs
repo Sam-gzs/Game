@@ -49,6 +49,10 @@ public class GridTile : MonoBehaviour
     [Tooltip("Mirror: true = '\\', false = '/'. A channel signal sets it to '/' when on.")]
     public bool mirrorDown = true;
 
+    /// <summary>Seconds left of the squashed spring frame after a ball bounced off it.</summary>
+    float springHitTimer;
+    const float SpringHitTime = 0.10f;
+
     [Header("Tutorial text (used by TextAnchor)")]
     [TextArea] public string tutorialText = "TEXT";
     public int tutorialFontSize = 28;
@@ -147,6 +151,7 @@ public class GridTile : MonoBehaviour
         else if (type == TileType.Sticky) StickyTick();
         else if (type == TileType.BallSwitch) BallSwitchTick();
         else if (type == TileType.TriggerBall) TriggerBallTick();
+        else if (type == TileType.Mirror) SpringTick();
         else if (type == TileType.TextAnchor && tutorialTimer > 0f)
             tutorialTimer = Mathf.Max(0f, tutorialTimer - Time.deltaTime);
     }
@@ -479,8 +484,9 @@ public class GridTile : MonoBehaviour
         bool changed = mirrorDown != !open;
         mirrorDown = !open;
         if (sr == null) sr = GetComponent<SpriteRenderer>();
-        if (sr != null)
-            sr.sprite = RefractorSprite(mirrorDown ? TileType.RefractorDown : TileType.RefractorUp);
+        // A spring looks the same in both orientations; mirrorDown still drives the bounce
+        // direction, so a motorized mirror keeps working, it just has no visible "\"/"/" state.
+        if (sr != null) sr.sprite = SpringSprite(false);
         if (changed && Application.isPlaying) AudioManager.Play(Sfx.MirrorTurn);
     }
 
@@ -783,7 +789,7 @@ public class GridTile : MonoBehaviour
             case TileType.Mirror:
                 sr.enabled = true;
                 sr.color = Color.white;
-                sr.sprite = RefractorSprite(mirrorDown ? TileType.RefractorDown : TileType.RefractorUp);
+                sr.sprite = SpringSprite(false);
                 col.enabled = true;
                 col.isTrigger = false;
                 break;
@@ -888,6 +894,43 @@ public class GridTile : MonoBehaviour
         }
         if (s_refractUp == null) s_refractUp = Resources.Load<Sprite>("BlockRefractUp");
         return s_refractUp;
+    }
+
+    // ---- spring (the reflect block) ------------------------------------
+
+    static Sprite s_spring;
+    static Sprite s_springHit;
+
+    /// <summary>Spring art: the resting coil, or the squashed one for the moment it is hit.</summary>
+    static Sprite SpringSprite(bool squashed)
+    {
+        if (squashed)
+        {
+            if (s_springHit == null) s_springHit = Resources.Load<Sprite>("Spring_Hit");
+            if (s_springHit != null) return s_springHit;
+        }
+
+        if (s_spring == null) s_spring = Resources.Load<Sprite>("Spring");
+        return s_spring;
+    }
+
+    /// <summary>A ball bounced off this spring: show the squashed frame for a moment.</summary>
+    public void SpringHit()
+    {
+        if (type != TileType.Mirror) return;
+        springHitTimer = SpringHitTime;
+        if (sr != null) sr.sprite = SpringSprite(true);
+    }
+
+    void SpringTick()
+    {
+        if (springHitTimer <= 0f) return;
+
+        springHitTimer -= Time.deltaTime;
+        if (springHitTimer > 0f) return;
+
+        springHitTimer = 0f;
+        if (sr != null) sr.sprite = SpringSprite(false);
     }
 
     /// <summary>
