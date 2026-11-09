@@ -29,6 +29,18 @@ public enum TileType
 }
 
 /// <summary>
+/// Which side of a spring (TileType.Bounce) faces the ball. The spring only gives along this
+/// axis: a ball arriving against the face is thrown straight back, anything else hits a wall.
+/// </summary>
+public enum SpringFacing
+{
+    Up,
+    Down,
+    Left,
+    Right
+}
+
+/// <summary>
 /// One map cell. Drop the GridTile prefab into the scene and change its type,
 /// or use Tools > Grid Painter to paint cells.
 /// </summary>
@@ -48,6 +60,11 @@ public class GridTile : MonoBehaviour
 
     [Tooltip("Mirror: true = '\\', false = '/'. A channel signal sets it to '/' when on.")]
     public bool mirrorDown = true;
+
+    [Header("Spring (TileType.Bounce)")]
+    [Tooltip("Which side of the spring faces the ball. The spring only gives along this axis: " +
+             "a ball arriving against the face is thrown straight back, every other side is solid.")]
+    public SpringFacing springFacing = SpringFacing.Right;
 
     /// <summary>Seconds left of the squashed spring frame after a ball bounced off it.</summary>
     float springHitTimer;
@@ -742,7 +759,7 @@ public class GridTile : MonoBehaviour
                 col.isTrigger = false;
                 break;
             case TileType.Bounce:
-                sr.sprite = SpringSprite(false);
+                ApplySpringSprite(false);
                 sr.color = Color.white;
                 sr.enabled = true;
                 col.enabled = true;
@@ -896,22 +913,62 @@ public class GridTile : MonoBehaviour
         return s_refractUp;
     }
 
-    // ---- spring (the reflect block) ------------------------------------
+    // ---- spring (the bounce block) --------------------------------------
 
-    static Sprite s_spring;
-    static Sprite s_springHit;
+    static Sprite s_springUp, s_springUpHit, s_springSide, s_springSideHit;
 
-    /// <summary>Spring art: the resting coil, or the squashed one for the moment it is hit.</summary>
-    static Sprite SpringSprite(bool squashed)
+    /// <summary>Direction the spring's face points at.</summary>
+    public Vector2Int SpringFace
     {
-        if (squashed)
+        get
         {
-            if (s_springHit == null) s_springHit = Resources.Load<Sprite>("Spring_Hit");
-            if (s_springHit != null) return s_springHit;
+            switch (springFacing)
+            {
+                case SpringFacing.Up: return Vector2Int.up;
+                case SpringFacing.Down: return Vector2Int.down;
+                case SpringFacing.Left: return Vector2Int.left;
+                default: return Vector2Int.right;
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when a ball travelling along <paramref name="dir"/> runs into the spring's face.
+    /// A real spring only gives along its own axis - every other side is just a wall.
+    /// </summary>
+    public bool SpringCatches(Vector2Int dir)
+    {
+        return type == TileType.Bounce && dir == -SpringFace;
+    }
+
+    /// <summary>Spring art: vertical or horizontal, resting or compressed.</summary>
+    static Sprite SpringSprite(bool horizontal, bool squashed)
+    {
+        if (horizontal)
+        {
+            if (s_springSide == null) s_springSide = Resources.Load<Sprite>("Spring_Side");
+            if (!squashed) return s_springSide;
+            if (s_springSideHit == null) s_springSideHit = Resources.Load<Sprite>("Spring_Side_Hit");
+            return s_springSideHit != null ? s_springSideHit : s_springSide;
         }
 
-        if (s_spring == null) s_spring = Resources.Load<Sprite>("Spring");
-        return s_spring;
+        if (s_springUp == null) s_springUp = Resources.Load<Sprite>("Spring");
+        if (!squashed) return s_springUp;
+        if (s_springUpHit == null) s_springUpHit = Resources.Load<Sprite>("Spring_Hit");
+        return s_springUpHit != null ? s_springUpHit : s_springUp;
+    }
+
+    /// <summary>Picks the sprite and mirroring that match the spring's facing.</summary>
+    void ApplySpringSprite(bool squashed)
+    {
+        if (sr == null) return;
+
+        bool horizontal = springFacing == SpringFacing.Left || springFacing == SpringFacing.Right;
+        sr.sprite = SpringSprite(horizontal, squashed);
+
+        // The art is authored facing up / right; Left and Down are the mirrored copies.
+        sr.flipX = springFacing == SpringFacing.Left;
+        sr.flipY = springFacing == SpringFacing.Down;
     }
 
     /// <summary>A ball bounced off this spring: show the squashed frame for a moment.</summary>
@@ -919,7 +976,7 @@ public class GridTile : MonoBehaviour
     {
         if (type != TileType.Bounce) return;
         springHitTimer = SpringHitTime;
-        if (sr != null) sr.sprite = SpringSprite(true);
+        ApplySpringSprite(true);
     }
 
     void SpringTick()
@@ -930,7 +987,7 @@ public class GridTile : MonoBehaviour
         if (springHitTimer > 0f) return;
 
         springHitTimer = 0f;
-        if (sr != null) sr.sprite = SpringSprite(false);
+        ApplySpringSprite(false);
     }
 
     /// <summary>

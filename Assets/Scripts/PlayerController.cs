@@ -560,6 +560,8 @@ public class PlayerController : MonoBehaviour
 
                 case TileType.Bounce:
                     points.Add(Center(next));
+                    // A spring only pushes back along its own axis; a side hit just stops the ball.
+                    if (!tile.SpringCatches(d)) return points;
                     d = -d;
                     bounces++;
                     if (bounces > 6) return points;

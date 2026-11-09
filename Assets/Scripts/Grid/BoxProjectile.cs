@@ -408,6 +408,31 @@ public class BoxProjectile : MonoBehaviour
                 return;
             }
 
+            // Spring: a real spring only gives along the axis of its face. A ball arriving
+            // against the face is thrown straight back with the same momentum (elastic);
+            // every other side is a solid block. Checked for falling balls too, which is
+            // exactly how a spring gets used as a trampoline.
+            if (tile.type == TileType.Bounce)
+            {
+                if (tile.SpringCatches(dir))
+                {
+                    AudioManager.Play(Sfx.Bounce);
+                    tile.SpringHit();
+
+                    Direction = -dir;
+                    moving = true;
+                    falling = false;
+                    sliding = false;
+                    fromPos = toPos;
+                    t = 0f;
+                    return;
+                }
+
+                CeilingPenalty(dir);
+                StopHere();
+                return;
+            }
+
             if (moving)
             {
                 // Refractor mirrors (R/T): the ball enters the cell and then turns.
@@ -478,17 +503,7 @@ public class BoxProjectile : MonoBehaviour
                     return;
                 }
 
-                // Sticky blocks are handled above, for both moving and falling balls.
-
-                if (tile.type == TileType.Bounce)
-                {
-                    AudioManager.Play(Sfx.Bounce);
-                    tile.SpringHit();
-                    Direction = -Direction;
-                    fromPos = toPos;
-                    t = 0f;
-                    return;
-                }
+                // Sticky blocks and springs are handled above, for moving and falling balls alike.
             }
         }
 
