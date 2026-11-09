@@ -184,14 +184,25 @@ public class GridTile : MonoBehaviour
         if (!Application.isPlaying) return;
 
         if (type == TileType.Falling) FallTick();
-        else if (type == TileType.Plate) PlateTick();
         else if (type == TileType.Sticky) StickyTick();
-        else if (type == TileType.BallSwitch) BallSwitchTick();
         else if (type == TileType.TriggerBall) TriggerBallTick();
         else if (type == TileType.Bounce) SpringTick();
         else if (type == TileType.CatTrigger) CatTriggerTick();
         else if (type == TileType.TextAnchor && tutorialTimer > 0f)
             tutorialTimer = Mathf.Max(0f, tutorialTimer - Time.deltaTime);
+    }
+
+    /// <summary>
+    /// Sensors are settled only after every moving thing has finished its step, so a switch can
+    /// never bend the movement that is being resolved in the same frame: during movement the
+    /// switch simply does not exist, and once everything has landed the channel is evaluated.
+    /// </summary>
+    void LateUpdate()
+    {
+        if (!Application.isPlaying) return;
+
+        if (type == TileType.BallSwitch) BallSwitchTick();
+        else if (type == TileType.Plate) PlateTick();
     }
 
     /// <summary>Fires once when a ball's logical cell enters this tile.</summary>
@@ -379,14 +390,14 @@ public class GridTile : MonoBehaviour
     }
 
     /// <summary>
-    /// Is there a solid block directly below the sticky? Jelly/buttons/plates/open gates do not
-    /// count, and neither does the ball that is parked on a button - see below.
+    /// Is there a solid block directly below the sticky? Jelly/buttons/plates/open gates do not count.
+    /// A switch is invisible here: the cell is treated exactly as if the switch were not there, so
+    /// a ball parked in it still holds the slime up like any other body would.
     /// </summary>
     public bool HasBlockBelow()
     {
         Vector2Int belowCell = cell + Vector2Int.down;
         var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
-        bool buttonCell = false;
         for (int i = 0; i < tiles.Length; i++)
         {
             var t = tiles[i];
@@ -394,18 +405,9 @@ public class GridTile : MonoBehaviour
 
             if (t.type == TileType.Falling) continue; // a moving falling block is not a support
             if (t.type == TileType.Gate && t.GateOpen) continue;
-            if (IsStickyPassable(t.type))
-            {
-                if (IsButtonLike(t.type)) buttonCell = true;
-                continue;
-            }
+            if (IsStickyPassable(t.type)) continue;
             return true;
         }
-
-        // A button cell is a hole for slime, full stop. A ball sitting on a ball-switch is only
-        // there to hold that switch, so it must not turn the cell into a floor either: otherwise
-        // the switch (via its cat) silently bends a sticky block that is falling through it.
-        if (buttonCell) return false;
 
         return BoxProjectile.IsBoxAt(belowCell);
     }

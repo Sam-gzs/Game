@@ -559,23 +559,19 @@ public class BoxProjectile : MonoBehaviour
             Vector2Int dir = newCell - old;
             Vector2Int stickyCell = followStickyAhead ? newCell + dir : old;
 
-            // A carried sticky follows one cell per step. When the ball turns around, "ahead"
-            // ends up on the far side of the ball, and moving the sticky there would teleport it
-            // straight through the ball (push it up into a switch, let the ball fall, and the
-            // sticky snaps back down). In that case leave it where it is and drop the carry.
+            // A carried sticky follows one cell per step. If the ball turned around, the target
+            // sits on the far side of the ball - leave the sticky where it is this step instead
+            // of teleporting it through the ball. The carry is kept, it just does not move.
             Vector2Int from = followSticky.cell;
             int step = Mathf.Abs(stickyCell.x - from.x) + Mathf.Abs(stickyCell.y - from.y);
 
-            if (step > 1)
-            {
-                if (GridTile.TraceSticky)
-                    Debug.Log($"[Sticky] RELEASE {from} (ball {old}->{newCell}, target {stickyCell} was {step} cells away)");
-                followSticky.DetachFromBall();
-                followSticky = null;
-            }
-            else
+            if (step <= 1)
             {
                 followSticky.FollowTo(stickyCell);
+            }
+            else if (GridTile.TraceSticky)
+            {
+                Debug.Log($"[Sticky] HOLD {from} (ball {old}->{newCell}, target {stickyCell} was {step} cells away)");
             }
         }
 
