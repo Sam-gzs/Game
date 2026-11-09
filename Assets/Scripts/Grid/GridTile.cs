@@ -65,16 +65,10 @@ public class GridTile : MonoBehaviour
     [Tooltip("Switches, gates, mirrors and plates are bound by this number: same channel = same circuit.")]
     public int channel = 1;
 
-    [Tooltip("Gate: invert its state (open while the channel is off).")]
+    [Tooltip("Gate: open while the channel is off (inverting the gate itself).\n" +
+             "Switch / BallSwitch: invert what the switch means - unlit (red/brown) counts as " +
+             "pressed, so its gate stays open and pressing it closes the gate.")]
     public bool invert;
-
-    [Tooltip("Switch / BallSwitch: the state this switch counts as at level start. It is still " +
-             "drawn as the unactivated (red/brown) button, so a start-pressed switch holds its " +
-             "gate open while looking like nothing is pressed.")]
-    public bool startPressed;
-
-    /// <summary>Ball switch: has a ball ever been inside? Until it has, startPressed keeps holding.</summary>
-    bool ballSwitchSeenBall;
 
     [Tooltip("Mirror: true = '\\', false = '/'. A channel signal sets it to '/' when on.")]
     public bool mirrorDown = true;
@@ -694,12 +688,7 @@ public class GridTile : MonoBehaviour
     /// </summary>
     void BallSwitchTick()
     {
-        bool hasBall = BoxProjectile.IsBoxAt(cell);
-        if (hasBall) ballSwitchSeenBall = true;
-
-        // "Starts pressed" means it behaves as if a ball were already resting on it, until the
-        // first ball actually shows up. After that it is a plain occupancy switch again.
-        bool pressed = hasBall || (startPressed && !ballSwitchSeenBall);
+        bool pressed = BoxProjectile.IsBoxAt(cell);
         if (pressed == SwitchOn) return;
 
         SetSwitchState(pressed);
@@ -900,10 +889,10 @@ public class GridTile : MonoBehaviour
             case TileType.Switch:
                 sr.enabled = true;
                 sr.color = Color.white;
-                sr.sprite = ResourceSprite("SwitchOff");   // always looks unactivated at start
+                sr.sprite = ResourceSprite("SwitchOff");
                 col.enabled = true;
                 col.isTrigger = false;
-                SwitchOn = startPressed;                   // ... whatever it counts as
+                SwitchOn = false;
                 break;
             case TileType.BallSwitch:
                 sr.enabled = true;
@@ -913,7 +902,7 @@ public class GridTile : MonoBehaviour
                 // no physical presence at all: the player, ball and falling blocks all pass
                 col.enabled = false;
                 col.isTrigger = true;
-                SwitchOn = startPressed;
+                SwitchOn = false;
                 break;
             case TileType.Gate:
                 sr.enabled = true;
