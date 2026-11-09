@@ -459,7 +459,9 @@ public class GridTile : MonoBehaviour
         if (followBall != null) return;
 
         // Moving into a cell that touches a normal brick: it glues there, mid-motion.
-        bool anchoredNow = IsStickyAnchored() && (followFalling != null || HasBlockBelow());
+        // A switch cell never glues: the slime passes over it like it was empty.
+        bool anchoredNow = !IsSwitchCellAt(cell) && IsStickyAnchored() &&
+                           (followFalling != null || HasBlockBelow());
         if (anchoredNow)
         {
             if (!gluedToWall)
@@ -513,6 +515,19 @@ public class GridTile : MonoBehaviour
         stickyTo = GridUtil.CellCenter(cell);
     }
 
+    /// <summary>True when that cell currently holds a button / plate / switch - something with no body.</summary>
+    static bool IsSwitchCellAt(Vector2Int c)
+    {
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            var t = tiles[i];
+            if (t == null || !t.OccupiesCell(c)) continue;
+            if (IsButtonLike(t.type)) return true;
+        }
+        return false;
+    }
+
     /// <summary>The carrying ball moves one cell; the sticky follows into the cell it just left.</summary>
     public void FollowTo(Vector2Int newCell)
     {
@@ -521,7 +536,11 @@ public class GridTile : MonoBehaviour
         cell = newCell;
         transform.position = new Vector3(newCell.x + 0.5f, newCell.y + 0.5f, 0f);
 
-        // While being carried, touching a normal brick glues it mid-motion.
+        // While being carried, touching a normal brick glues it mid-motion - but a switch is not
+        // a brick: passing over one must never stop the slime, it just keeps moving as it would
+        // with the switch taken out of the level.
+        if (IsSwitchCellAt(newCell)) return;
+
         if (IsStickyAnchored())
         {
             if (TraceSticky)
