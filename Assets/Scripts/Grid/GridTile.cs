@@ -391,13 +391,16 @@ public class GridTile : MonoBehaviour
 
     /// <summary>
     /// Is there a solid block directly below the sticky? Jelly/buttons/plates/open gates do not count.
-    /// A switch is invisible here: the cell is treated exactly as if the switch were not there, so
-    /// a ball parked in it still holds the slime up like any other body would.
+    ///
+    /// A switch cell is empty space for slime, full stop: the tile has no body, and a ball that
+    /// happens to be parked in that cell is only there to hold the switch - it must not quietly
+    /// become a floor either, otherwise the switch bends the slime's fall after all.
     /// </summary>
     public bool HasBlockBelow()
     {
         Vector2Int belowCell = cell + Vector2Int.down;
         var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        bool buttonCell = false;
         for (int i = 0; i < tiles.Length; i++)
         {
             var t = tiles[i];
@@ -405,9 +408,15 @@ public class GridTile : MonoBehaviour
 
             if (t.type == TileType.Falling) continue; // a moving falling block is not a support
             if (t.type == TileType.Gate && t.GateOpen) continue;
-            if (IsStickyPassable(t.type)) continue;
+            if (IsStickyPassable(t.type))
+            {
+                if (IsButtonLike(t.type)) buttonCell = true;
+                continue;
+            }
             return true;
         }
+
+        if (buttonCell) return false;
 
         return BoxProjectile.IsBoxAt(belowCell);
     }
