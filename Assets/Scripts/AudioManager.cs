@@ -76,18 +76,43 @@ public static class AudioManager
     static float[] lastPlay;
     static AudioSource[] voices;
     static AudioSource bgmSource;
+    static GameObject root;
     static string bgmName;
     static bool booted;
+    static bool loggedFailure;
     static int cursor;
 
     // ------------------------------------------------------------------
     // boot
     // ------------------------------------------------------------------
 
+    /// <summary>
+    /// The project runs with "Enter Play Mode Options" and domain reload OFF, so these statics
+    /// survive from one play session to the next while the AudioSources they point at do not.
+    /// Clearing them here is what keeps the first sound of a run from throwing
+    /// "the object of type AudioSource has been destroyed" - and that exception used to abort
+    /// the throw that called it, which looked like "the cat sometimes refuses to fire".
+    /// </summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics()
+    {
+        booted = false;
+        loggedFailure = false;
+        root = null;
+        voices = null;
+        bgmSource = null;
+        bgmName = null;
+        defs = null;
+        clips = null;
+        usingFallback = null;
+        resolved = null;
+        lastPlay = null;
+        cursor = 0;
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void Boot()
     {
-        if (booted) return;
         booted = true;
 
         BuildDefs();
@@ -99,13 +124,16 @@ public static class AudioManager
         lastPlay = new float[count];
         for (int i = 0; i < count; i++) lastPlay[i] = -999f;
 
-        var go = new GameObject("AudioManager");
-        UnityEngine.Object.DontDestroyOnLoad(go);
+        if (root == null)
+        {
+            root = new GameObject("AudioManager");
+            UnityEngine.Object.DontDestroyOnLoad(root);
+        }
 
         voices = new AudioSource[VoiceCount];
         for (int i = 0; i < VoiceCount; i++)
         {
-            var src = go.AddComponent<AudioSource>();
+            var src = root.AddComponent<AudioSource>();
             src.playOnAwake = false;
             src.loop = false;
             src.spatialBlend = 0f;   // 2D: the game is a side view, panning would fight the mix
@@ -113,7 +141,7 @@ public static class AudioManager
             voices[i] = src;
         }
 
-        bgmSource = go.AddComponent<AudioSource>();
+        bgmSource = root.AddComponent<AudioSource>();
         bgmSource.playOnAwake = false;
         bgmSource.loop = true;
         bgmSource.spatialBlend = 0f;
@@ -202,6 +230,24 @@ public static class AudioManager
 
     public static void Play(Sfx id, float volume = 1f, float pitch = 1f)
     {
+        // Sound is decoration: if the mixer ever misbehaves it must not take gameplay down with
+        // it. This used to be the difference between "the cat fired" and "nothing happened".
+        try
+        {
+            PlayNow(id, volume, pitch);
+        }
+        catch (Exception e)
+        {
+            if (!loggedFailure)
+            {
+                loggedFailure = true;
+                Debug.LogWarning("AudioManager.Play failed (sound skipped): " + e.Message);
+            }
+        }
+    }
+
+    static void PlayNow(Sfx id, float volume, float pitch)
+    {
         EnsureBoot();
         int i = (int)id;
         Def d = defs[i];
@@ -214,7 +260,10 @@ public static class AudioManager
         if (CountPlaying(clip) >= d.maxVoices) return;
 
         lastPlay[i] = now;
+
         AudioSource src = NextVoice();
+        if (src == null) return;   // nothing usable left in the pool
+
         src.Stop();
         src.clip = clip;
         src.volume = Mathf.Clamp01(d.volume * volMul * volume);
@@ -230,18 +279,29 @@ public static class AudioManager
     /// </summary>
     public static void PlayBallSpeed(int level)
     {
-        EnsureBoot();
-        level = Mathf.Clamp(level, 1, 5);
-        int i = (int)Sfx.BallSpeed1 + (level - 1);
-        if (Time.unscaledTime - lastPlay[i] < defs[i].minInterval) return;
-
-        // Also gate against the neighbouring levels: 1 -> 2 should not stack.
-        for (int k = 0; k < 5; k++)
+        try
         {
-            if (Time.unscaledTime - lastPlay[(int)Sfx.BallSpeed1 + k] < 0.18f) return;
-        }
+            EnsureBoot();
+            level = Mathf.Clamp(level, 1, 5);
+            int i = (int)Sfx.BallSpeed1 + (level - 1);
+            if (Time.unscaledTime - lastPlay[i] < defs[i].minInterval) return;
 
-        Play((Sfx)i);
+            // Also gate against the neighbouring levels: 1 -> 2 should not stack.
+            for (int k = 0; k < 5; k++)
+            {
+                if (Time.unscaledTime - lastPlay[(int)Sfx.BallSpeed1 + k] < 0.18f) return;
+            }
+
+            Play((Sfx)i);
+        }
+        catch (Exception e)
+        {
+            if (!loggedFailure)
+            {
+                loggedFailure = true;
+                Debug.LogWarning("AudioManager.PlayBallSpeed failed (sound skipped): " + e.Message);
+            }
+        }
     }
 
     static AudioClip Resolve(int i, Def d, out float volMul, out float pitchMul)
@@ -276,10 +336,12 @@ public static class AudioManager
 
     static int CountPlaying(AudioClip clip)
     {
+        if (voices == null) return 0;
         int n = 0;
         for (int i = 0; i < voices.Length; i++)
         {
             var v = voices[i];
+            // A destroyed AudioSource compares equal to null, so dead voices are never touched.
             if (v != null && v.isPlaying && v.clip == clip) n++;
         }
         return n;
@@ -287,25 +349,39 @@ public static class AudioManager
 
     static AudioSource NextVoice()
     {
-        for (int i = 0; i < voices.Length; i++)
+        if (voices == null || voices.Length == 0) return null;
+
+        int n = voices.Length;
+
+        // Free voice first, skipping any source that a previous scene (or play session) destroyed.
+        for (int i = 0; i < n; i++)
         {
-            int k = (cursor + i) % voices.Length;
-            if (!voices[k].isPlaying)
+            int k = (cursor + i) % n;
+            var v = voices[k];
+            if (v == null) continue;
+            if (!v.isPlaying)
             {
-                cursor = (k + 1) % voices.Length;
-                return voices[k];
+                cursor = (k + 1) % n;
+                return v;
             }
         }
 
-        // All busy: steal in round-robin order.
-        var fallback = voices[cursor];
-        cursor = (cursor + 1) % voices.Length;
-        return fallback;
+        // All busy: steal in round-robin order, again skipping dead entries.
+        for (int i = 0; i < n; i++)
+        {
+            int k = (cursor + i) % n;
+            var v = voices[k];
+            if (v == null) continue;
+            cursor = (k + 1) % n;
+            return v;
+        }
+
+        return null;
     }
 
     static void EnsureBoot()
     {
-        if (!booted) Boot();
+        if (!booted || root == null) Boot();
     }
 
     // ------------------------------------------------------------------
@@ -315,23 +391,37 @@ public static class AudioManager
     /// <summary>Play a looping track from Resources/Audio/bgm/&lt;name&gt;. Same name = keeps playing.</summary>
     public static void PlayBgm(string name, float volume = 0.45f)
     {
-        EnsureBoot();
-        if (string.IsNullOrEmpty(name) || bgmName == name) return;
-
-        var clip = Resources.Load<AudioClip>(Root + "bgm/" + name);
-        bgmName = name;
-
-        if (clip == null)
+        try
         {
-            StopBgm();
-            bgmName = name;   // remember the request so a later scene does not retry every frame
-            return;
-        }
+            EnsureBoot();
+            if (string.IsNullOrEmpty(name) || bgmName == name) return;
 
-        bgmSource.Stop();
-        bgmSource.clip = clip;
-        bgmSource.volume = Mathf.Clamp01(volume);
-        bgmSource.Play();
+            var clip = Resources.Load<AudioClip>(Root + "bgm/" + name);
+            bgmName = name;
+
+            if (clip == null)
+            {
+                StopBgm();
+                bgmName = name;   // remember the request so a later scene does not retry every frame
+                return;
+            }
+
+            var src = EnsureBgmSource();
+            if (src == null) return;
+
+            src.Stop();
+            src.clip = clip;
+            src.volume = Mathf.Clamp01(volume);
+            src.Play();
+        }
+        catch (Exception e)
+        {
+            if (!loggedFailure)
+            {
+                loggedFailure = true;
+                Debug.LogWarning("AudioManager.PlayBgm failed (no music): " + e.Message);
+            }
+        }
     }
 
     public static void StopBgm()
@@ -350,5 +440,18 @@ public static class AudioManager
     {
         EnsureBoot();
         if (bgmSource != null) bgmSource.volume = Mathf.Clamp01(volume);
+    }
+
+    static AudioSource EnsureBgmSource()
+    {
+        if (bgmSource != null) return bgmSource;
+        if (root == null) return null;
+
+        bgmSource = root.AddComponent<AudioSource>();
+        bgmSource.playOnAwake = false;
+        bgmSource.loop = true;
+        bgmSource.spatialBlend = 0f;
+        bgmSource.volume = 0.45f;
+        return bgmSource;
     }
 }

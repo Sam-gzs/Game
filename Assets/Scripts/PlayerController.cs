@@ -67,6 +67,7 @@ public class PlayerController : MonoBehaviour
         if (chargeStep <= 0.01f) chargeStep = 0.22f;
         if (jellySlow <= 0.01f) jellySlow = 0.35f;
         CreateAimLine();
+        ChargeBarUI.Ensure();
         rb.freezeRotation = true;
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
@@ -106,6 +107,7 @@ public class PlayerController : MonoBehaviour
             charge = 0;
             MoveInput = 0f;
             HideAimPreview();
+            ChargeBarUI.SetCharge(0);
             return;
         }
 
@@ -188,6 +190,8 @@ public class PlayerController : MonoBehaviour
 
         if (charging) UpdateAimPreview();
         else HideAimPreview();
+
+        ChargeBarUI.SetCharge(charging ? charge : 0);
 
         if (visual != null)
         {
@@ -343,15 +347,22 @@ public class PlayerController : MonoBehaviour
         }
 
         ThrowCount++;
-        AudioManager.Play(Sfx.Throw);
         int finalPower = Mathf.Clamp(power, 1, maxCharge);
+
+        // Spawn first, play the sound second: nothing in the audio path may ever swallow a throw.
+        BoxProjectile spawned = null;
         if (cat != null)
         {
             // The cat snaps to the player's hand, curls into a ball, then the ball is spawned.
             cat.BeginThrow(targetCell, dir, finalPower);
-            return null;
         }
-        return BoxProjectile.Spawn(targetCell, dir, blockSprite, blockMaterial, finalPower);
+        else
+        {
+            spawned = BoxProjectile.Spawn(targetCell, dir, blockSprite, blockMaterial, finalPower);
+        }
+
+        AudioManager.Play(Sfx.Throw);
+        return spawned;
     }
 
     // ---------------------------------------------------------------------
@@ -622,29 +633,6 @@ public class PlayerController : MonoBehaviour
     void OnDisable()
     {
         HideAimPreview();
-    }
-
-    void OnGUI()
-    {
-        if (!Application.isPlaying) return;
-
-        GUIStyle label = new GUIStyle(GUI.skin.label) { fontSize = 14 };
-        label.normal.textColor = new Color(0.85f, 0.89f, 0.98f, 0.9f);
-
-        GUI.Label(new Rect(18f, 44f, 80f, 22f), "POWER", label);
-
-        for (int i = 0; i < maxCharge; i++)
-        {
-            var r = new Rect(88f + i * 28f, 48f, 22f, 14f);
-            GUI.color = i < charge
-                ? (i == 2 ? new Color(1f, 0.93f, 0.45f) : new Color(1f, 0.62f, 0.24f))
-                : new Color(1f, 1f, 1f, 0.14f);
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-        }
-        GUI.color = Color.white;
-
-        if (charging)
-            GUI.Label(new Rect(18f, 64f, 300f, 22f), "release to throw  (power " + charge + ")", label);
     }
 
     /// <summary>Width of the free strip needed beside the feet cell to release a box.</summary>
