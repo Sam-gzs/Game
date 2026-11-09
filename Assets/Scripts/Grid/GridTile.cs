@@ -25,7 +25,17 @@ public enum TileType
     BallSwitch,      // channel switch that is ON only while a ball is inside its cell
     TriggerPlayer,   // invisible in play; fires a tutorial text when the player enters
     TriggerBall,     // invisible in play; fires a tutorial text when a ball is in the cell
-    TextAnchor       // invisible in play; marker that owns/displays the tutorial text
+    TextAnchor,      // invisible in play; marker that owns/displays the tutorial text
+    CatTrigger,      // colourless trigger: touching it lets the cat in
+    CatExit          // colourless marker: where the cat waits before it is let in
+}
+
+/// <summary>Who is allowed to set a CatTrigger off.</summary>
+public enum CatTriggerActor
+{
+    Player,
+    Cat,
+    Both
 }
 
 /// <summary>
@@ -69,6 +79,12 @@ public class GridTile : MonoBehaviour
     /// <summary>Seconds left of the squashed spring frame after a ball bounced off it.</summary>
     float springHitTimer;
     const float SpringHitTime = 0.10f;
+
+    [Header("Cat trigger (TileType.CatTrigger)")]
+    [Tooltip("Who can set this trigger off. The cat is allowed too, for levels where it has to reach one.")]
+    public CatTriggerActor catTriggerActor = CatTriggerActor.Player;
+
+    bool catTriggered;
 
     [Header("Tutorial text (used by TextAnchor)")]
     [TextArea] public string tutorialText = "TEXT";
@@ -169,6 +185,7 @@ public class GridTile : MonoBehaviour
         else if (type == TileType.BallSwitch) BallSwitchTick();
         else if (type == TileType.TriggerBall) TriggerBallTick();
         else if (type == TileType.Bounce) SpringTick();
+        else if (type == TileType.CatTrigger) CatTriggerTick();
         else if (type == TileType.TextAnchor && tutorialTimer > 0f)
             tutorialTimer = Mathf.Max(0f, tutorialTimer - Time.deltaTime);
     }
@@ -196,6 +213,42 @@ public class GridTile : MonoBehaviour
     public void ShowTutorial()
     {
         tutorialTimer = Mathf.Max(0.1f, tutorialDuration);
+    }
+
+    // ---- cat trigger / cat exit ------------------------------------------
+
+    /// <summary>
+    /// The cat has no collider, so "the cat walked over it" is a cell comparison instead of a
+    /// physics callback. The player side is handled by the trigger collider in OnTriggerEnter2D.
+    /// </summary>
+    void CatTriggerTick()
+    {
+        if (catTriggered) return;
+        if (catTriggerActor != CatTriggerActor.Cat && catTriggerActor != CatTriggerActor.Both) return;
+
+        var cat = CatCompanion.Current;
+        if (cat == null || cat.IsDormant) return;
+        if (GridUtil.WorldToCell(cat.transform.position) != cell) return;
+
+        TriggerCat();
+    }
+
+    void TriggerCat()
+    {
+        if (catTriggered) return;
+        catTriggered = true;
+        CatCompanion.Summon();
+    }
+
+    /// <summary>The level's "the cat is waiting here" marker, if it has one.</summary>
+    public static GridTile FindCatExit()
+    {
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            if (tiles[i] != null && tiles[i].type == TileType.CatExit) return tiles[i];
+        }
+        return null;
     }
 
     /// <summary>Falling blocks drop cell by cell until something is under them.</summary>
@@ -232,7 +285,8 @@ public class GridTile : MonoBehaviour
             if (t.type == TileType.Switch || t.type == TileType.Plate ||
                 t.type == TileType.Jelly || t.type == TileType.BallSwitch ||
                 t.type == TileType.TriggerPlayer || t.type == TileType.TriggerBall ||
-                t.type == TileType.TextAnchor)
+                t.type == TileType.TextAnchor || t.type == TileType.CatTrigger ||
+                t.type == TileType.CatExit)
             {
                 if (t.type == TileType.Switch) button = t;
                 continue;
@@ -316,7 +370,8 @@ public class GridTile : MonoBehaviour
     {
         return t == TileType.Jelly || IsButtonLike(t) ||
                t == TileType.TriggerPlayer || t == TileType.TriggerBall ||
-               t == TileType.TextAnchor;
+               t == TileType.TextAnchor || t == TileType.CatTrigger ||
+               t == TileType.CatExit;
     }
 
     /// <summary>
@@ -899,6 +954,19 @@ public class GridTile : MonoBehaviour
                 sr.color = new Color(1f, 0.90f, 0.30f, 1f);
                 col.enabled = false;
                 break;
+            case TileType.CatTrigger:
+            case TileType.CatExit:
+                // colourless in play: a bare marker in the editor and nothing at all in the game.
+                // The trigger keeps a trigger collider so the player can run into it; the exit
+                // point has no collider so nobody bumps into it.
+                sr.enabled = !Application.isPlaying;
+                sr.sprite = baseSprite != null ? baseSprite : ResourceSprite("SwitchOff");
+                sr.color = type == TileType.CatTrigger
+                    ? new Color(1f, 0.62f, 0.15f, 1f)    // where the cat is called in
+                    : new Color(0.35f, 1f, 0.55f, 1f);   // where the cat is waiting
+                col.enabled = type == TileType.CatTrigger;
+                col.isTrigger = true;
+                break;
         }
 
         int speedPips = type == TileType.Stone ? 3 : type == TileType.Wood ? 2 : type == TileType.Dirt ? 1 : 0;
@@ -1124,6 +1192,12 @@ public class GridTile : MonoBehaviour
         if (type == TileType.TriggerPlayer)
         {
             FireTutorial(channel);
+            return;
+        }
+
+        if (type == TileType.CatTrigger)
+        {
+            if (catTriggerActor != CatTriggerActor.Cat) TriggerCat();
             return;
         }
 

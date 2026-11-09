@@ -670,7 +670,8 @@ public class BoxProjectile : MonoBehaviour
             if (t.type == TileType.Switch || t.type == TileType.Plate ||
                 t.type == TileType.Jelly || t.type == TileType.BallSwitch ||
                 t.type == TileType.TriggerPlayer || t.type == TileType.TriggerBall ||
-                t.type == TileType.TextAnchor) continue; // pass through
+                t.type == TileType.TextAnchor || t.type == TileType.CatTrigger ||
+                t.type == TileType.CatExit) continue; // pass through
             if (t.type == TileType.Gate && t.GateOpen) continue;                // open gate: hole
 
             return false;
@@ -714,7 +715,8 @@ public class BoxProjectile : MonoBehaviour
             if (t.type == TileType.Switch || t.type == TileType.Plate ||
                 t.type == TileType.Jelly || t.type == TileType.BallSwitch ||
                 t.type == TileType.TriggerPlayer || t.type == TileType.TriggerBall ||
-                t.type == TileType.TextAnchor) continue;
+                t.type == TileType.TextAnchor || t.type == TileType.CatTrigger ||
+                t.type == TileType.CatExit) continue;
             if (t.type == TileType.Gate && t.GateOpen) continue;
 
             return false;

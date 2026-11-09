@@ -31,8 +31,20 @@ public class CatCompanion : MonoBehaviour
     public bool IsBusy => false;
     public bool IsVisible => visible;
 
+    /// <summary>The cat belonging to the player of the current level, if any.</summary>
+    public static CatCompanion Current { get; private set; }
+
+    /// <summary>True while the cat is still waiting out of sight, not yet let into the level.</summary>
+    public bool IsDormant => dormant;
+
+    bool dormant;
+
+    /// <summary>Seconds left of the "sprint after the player" burst right after being let in.</summary>
+    float catchUp;
+
     void Awake()
     {
+        Current = this;
         if (player == null) player = GetComponentInParent<PlayerController>();
 
         walk = LoadSequence("CatWalk", 12);
@@ -79,7 +91,16 @@ public class CatCompanion : MonoBehaviour
     {
         if (player == null) return;
 
+        // Still waiting behind the wall: no wandering, nothing to see.
+        if (dormant)
+        {
+            SetVisible(false);
+            return;
+        }
+
         float dt = Time.deltaTime;
+
+        if (catchUp > 0f) catchUp = Mathf.Max(0f, catchUp - dt);
 
         if (BoxProjectile.Count > 0)
         {
@@ -106,7 +127,9 @@ public class CatCompanion : MonoBehaviour
         float dx = wanderTarget.x - catRoot.position.x;
         if (Mathf.Abs(dx) > 0.03f)
         {
-            float nx = Mathf.MoveTowards(catRoot.position.x, wanderTarget.x, moveSpeed * dt);
+            // Right after being let in it sprints, so it visibly runs out of the gap to the player.
+            float speed = catchUp > 0f ? moveSpeed * 2.5f : moveSpeed;
+            float nx = Mathf.MoveTowards(catRoot.position.x, wanderTarget.x, speed * dt);
             catRoot.position = new Vector3(nx, feet.y, 0f);
 
             sr.flipX = dx > 0f;
@@ -134,7 +157,8 @@ public class CatCompanion : MonoBehaviour
     /// </summary>
     public void BeginThrow(Vector2Int targetCell, Vector2Int direction, int power)
     {
-        if (player != null)
+        // A cat that has not been let into the level yet must not pop up at the player's hand.
+        if (!dormant && player != null)
         {
             float feet = player.transform.position.y - 0.95f;
             catRoot.position = new Vector3(player.transform.position.x + player.Facing * 0.7f, feet, 0f);
@@ -142,6 +166,36 @@ public class CatCompanion : MonoBehaviour
 
         SetVisible(false);
         BoxProjectile.Spawn(targetCell, direction, null, null, power);
+    }
+
+    /// <summary>
+    /// Parks the cat out of sight until the level lets it in (a CatTrigger does that).
+    /// Used for the intro where it runs out of a gap in the wall.
+    /// </summary>
+    public void WaitAt(Vector3 worldPos)
+    {
+        dormant = true;
+        if (catRoot != null) catRoot.position = new Vector3(worldPos.x, worldPos.y, 0f);
+        wanderTarget = new Vector3(worldPos.x, worldPos.y, 0f);
+        catchUp = 0f;
+        SetVisible(false);
+    }
+
+    /// <summary>Let the cat in: it steps out where it was waiting and runs after the player.</summary>
+    public static void Summon()
+    {
+        var cat = Current;
+        if (cat == null || !cat.dormant) return;
+
+        cat.dormant = false;
+        cat.catchUp = 1.6f;
+        cat.wanderTimer = 0f;
+        cat.SetVisible(true);
+    }
+
+    void OnDestroy()
+    {
+        if (Current == this) Current = null;
     }
 
     void SetVisible(bool v)

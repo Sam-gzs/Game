@@ -90,6 +90,18 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// A level that contains a CatExit marker holds the cat back: it waits out of sight there
+    /// until a CatTrigger lets it in (Level 1 - it runs out of the gap behind the wall).
+    /// No marker, no waiting: the cat follows from the first frame, as in every other level.
+    /// </summary>
+    void Start()
+    {
+        if (cat == null) return;
+        var exit = GridTile.FindCatExit();
+        if (exit != null) cat.WaitAt(exit.transform.position);
+    }
+
     /// <summary>Bottom of the real (rounded) collider shape.</summary>
     float FeetY()
     {
