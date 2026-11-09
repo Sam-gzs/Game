@@ -108,6 +108,7 @@ public class PlayerController : MonoBehaviour
             MoveInput = 0f;
             HideAimPreview();
             ChargeBarUI.SetCharge(0);
+            ChargeBarUI.SetVisible(false);
             return;
         }
 
@@ -191,6 +192,7 @@ public class PlayerController : MonoBehaviour
         if (charging) UpdateAimPreview();
         else HideAimPreview();
 
+        ChargeBarUI.SetVisible(true);
         ChargeBarUI.SetCharge(charging ? charge : 0);
 
         if (visual != null)

@@ -61,6 +61,13 @@ public class ChargeBarUI : MonoBehaviour
         instance.SetLevel(level);
     }
 
+    /// <summary>Hidden while a pause / level-complete overlay is up.</summary>
+    public static void SetVisible(bool visible)
+    {
+        if (instance == null || instance.image == null) return;
+        if (instance.image.enabled != visible) instance.image.enabled = visible;
+    }
+
     static Sprite[] LoadSprites()
     {
         var list = new Sprite[States];
