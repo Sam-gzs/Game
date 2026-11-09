@@ -325,6 +325,7 @@ public class BoxProjectile : MonoBehaviour
                 if (speedLevel >= required)
                 {
                     PlayBreak(tile.type);
+                    BrickBreakFx.Play(tile.type, tile.transform.position);
                     Destroy(tile.gameObject);
                     speedLevel -= 1;
                     fromPos = transform.position;

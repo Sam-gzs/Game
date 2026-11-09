@@ -510,6 +510,11 @@ public class GridTile : MonoBehaviour
     /// <summary>Small white pips at the bottom of a block show the required ball speed.</summary>
     void SetThresholdPips(int count)
     {
+        // OnValidate runs on every import / domain reload, on scene objects and on the prefab
+        // asset. Creating children there dirties scenes and throws as soon as a serialized
+        // reference has gone stale - so the pips are generated at runtime only.
+        if (!Application.isPlaying) return;
+
         if (pipsRoot == null)
         {
             var existing = transform.Find("ThresholdPips");
@@ -521,7 +526,17 @@ public class GridTile : MonoBehaviour
             go.transform.SetParent(transform, false);
             pipsRoot = go.transform;
         }
-        if (pips == null || pips.Length != 3)
+
+        bool stale = pips == null || pips.Length != 3;
+        if (!stale)
+        {
+            for (int i = 0; i < pips.Length; i++)
+            {
+                if (pips[i] == null) { stale = true; break; }
+            }
+        }
+
+        if (stale)
         {
             var list = new System.Collections.Generic.List<SpriteRenderer>();
             for (int i = 0; i < pipsRoot.childCount; i++)
@@ -669,7 +684,7 @@ public class GridTile : MonoBehaviour
         if (baseSprite == null && type != TileType.Door) baseSprite = sr.sprite;
         RemoveDoorVisual();
 
-        if (type != TileType.Door && baseSprite != null) sr.sprite = baseSprite;
+        if (type != TileType.Door && baseSprite != null && sr.sprite != baseSprite) sr.sprite = baseSprite;
 
         switch (type)
         {
@@ -680,14 +695,14 @@ public class GridTile : MonoBehaviour
                 col.isTrigger = false;
                 break;
             case TileType.Stone:
-                sr.sprite = ResourceSprite("BlockStone");
-                sr.color = new Color(0.72f, 0.74f, 0.78f, 1f);
+                sr.sprite = BrickArt.Still(TileType.Stone);
+                sr.color = Color.white;   // the artwork is already coloured
                 sr.enabled = true;
                 col.enabled = true;
                 col.isTrigger = false;
                 break;
             case TileType.Wood:
-                sr.sprite = ResourceSprite("BlockWood");
+                sr.sprite = BrickArt.Still(TileType.Wood);
                 sr.color = Color.white;
                 sr.enabled = true;
                 col.enabled = true;
@@ -728,8 +743,8 @@ public class GridTile : MonoBehaviour
                 col.isTrigger = false;
                 break;
             case TileType.Dirt:
-                sr.sprite = ResourceSprite("BlockDirt");
-                sr.color = new Color(0.85f, 0.62f, 0.45f, 1f);
+                sr.sprite = BrickArt.Still(TileType.Dirt);
+                sr.color = Color.white;
                 sr.enabled = true;
                 col.enabled = true;
                 col.isTrigger = false;
