@@ -1,10 +1,14 @@
 # ---- Unity 生成目录（不要进版本库）----
-[Ll]ibrary/
-[Tt]emp/
-[Oo]bj/
-[Bb]uild/
-[Bb]uilds/
-[Ll]ogs/
+# 注意：构建输出只在工程根目录，所以 Build/ Builds/ 必须用行首斜杠锚定。
+# 不带斜杠的 [Bb]uild/ 会匹配任意层级的 Build 目录，曾把
+# Packages/com.coplaydev.unity-mcp/Editor/Tools/Build/ 的源码挡在仓库外，
+# 导致 MCP 包编译失败、进不了 Play 模式。
+/Library/
+/Temp/
+/Obj/
+/Build/
+/Builds/
+/Logs/
 [Uu]ser[Ss]ettings/
 [Mm]emoryCaptures/
 [Rr]ecordings/
