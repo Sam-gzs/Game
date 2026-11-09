@@ -151,7 +151,7 @@ public class GridTile : MonoBehaviour
         else if (type == TileType.Sticky) StickyTick();
         else if (type == TileType.BallSwitch) BallSwitchTick();
         else if (type == TileType.TriggerBall) TriggerBallTick();
-        else if (type == TileType.Mirror) SpringTick();
+        else if (type == TileType.Bounce) SpringTick();
         else if (type == TileType.TextAnchor && tutorialTimer > 0f)
             tutorialTimer = Mathf.Max(0f, tutorialTimer - Time.deltaTime);
     }
@@ -484,9 +484,8 @@ public class GridTile : MonoBehaviour
         bool changed = mirrorDown != !open;
         mirrorDown = !open;
         if (sr == null) sr = GetComponent<SpriteRenderer>();
-        // A spring looks the same in both orientations; mirrorDown still drives the bounce
-        // direction, so a motorized mirror keeps working, it just has no visible "\"/"/" state.
-        if (sr != null) sr.sprite = SpringSprite(false);
+        if (sr != null)
+            sr.sprite = RefractorSprite(mirrorDown ? TileType.RefractorDown : TileType.RefractorUp);
         if (changed && Application.isPlaying) AudioManager.Play(Sfx.MirrorTurn);
     }
 
@@ -743,7 +742,8 @@ public class GridTile : MonoBehaviour
                 col.isTrigger = false;
                 break;
             case TileType.Bounce:
-                sr.color = BounceColor;
+                sr.sprite = SpringSprite(false);
+                sr.color = Color.white;
                 sr.enabled = true;
                 col.enabled = true;
                 col.isTrigger = false;
@@ -789,7 +789,7 @@ public class GridTile : MonoBehaviour
             case TileType.Mirror:
                 sr.enabled = true;
                 sr.color = Color.white;
-                sr.sprite = SpringSprite(false);
+                sr.sprite = RefractorSprite(mirrorDown ? TileType.RefractorDown : TileType.RefractorUp);
                 col.enabled = true;
                 col.isTrigger = false;
                 break;
@@ -917,7 +917,7 @@ public class GridTile : MonoBehaviour
     /// <summary>A ball bounced off this spring: show the squashed frame for a moment.</summary>
     public void SpringHit()
     {
-        if (type != TileType.Mirror) return;
+        if (type != TileType.Bounce) return;
         springHitTimer = SpringHitTime;
         if (sr != null) sr.sprite = SpringSprite(true);
     }
