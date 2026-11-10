@@ -55,7 +55,8 @@ public class CatCompanion : MonoBehaviour
         Current = this;
         if (player == null) player = GetComponentInParent<PlayerController>();
 
-        int count = player != null ? Mathf.Clamp(player.MaxBoxCapacity, 1, 4) : 2;
+        // MaxBoxCapacity is a const, so it must be read off the type, not the instance.
+        int count = Mathf.Clamp(PlayerController.MaxBoxCapacity, 1, 4);
         for (int i = 0; i < count; i++) units.Add(BuildCat(i));
     }
 
