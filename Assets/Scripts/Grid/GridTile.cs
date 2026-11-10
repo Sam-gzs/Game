@@ -1074,7 +1074,23 @@ public class GridTile : MonoBehaviour
     /// </summary>
     Sprite RefractorSprite(TileType t)
     {
-        switch (refractFacing)
+        // Several level tiles are authored with a 180-degree rotation (art alignment).
+        // Compensate for it here so refractFacing always means the VISUAL solid corner,
+        // no matter how the tile instance happens to be rotated in the scene.
+        RefractFacing facing = refractFacing;
+        if (facing != RefractFacing.Auto &&
+            Mathf.Abs(Mathf.DeltaAngle(transform.localEulerAngles.z, 180f)) < 1f)
+        {
+            switch (facing)
+            {
+                case RefractFacing.SolidTopLeft: facing = RefractFacing.SolidBottomRight; break;
+                case RefractFacing.SolidBottomRight: facing = RefractFacing.SolidTopLeft; break;
+                case RefractFacing.SolidBottomLeft: facing = RefractFacing.SolidTopRight; break;
+                case RefractFacing.SolidTopRight: facing = RefractFacing.SolidBottomLeft; break;
+            }
+        }
+
+        switch (facing)
         {
             // Solid corner -> sprite.  mirror_<xy> is named after the original art's
             // rotation, so this is not a naive name match.

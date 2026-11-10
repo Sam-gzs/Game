@@ -17,6 +17,7 @@ public class CatCompanion : MonoBehaviour
     public int sortingOrder = 7;
 
     Sprite[] walk;
+    Sprite idle;
 
     Transform catRoot;
     SpriteRenderer sr;
@@ -47,7 +48,10 @@ public class CatCompanion : MonoBehaviour
         Current = this;
         if (player == null) player = GetComponentInParent<PlayerController>();
 
-        walk = LoadSequence("CatWalk", 12);
+        // Grey-white cat from the art drop (tight-cropped, same framing as the fork
+        // sprites); the fork's CatWalk sequence stays as the fallback.
+        walk = CatArt.Walk(false) ?? LoadSequence("CatWalk", 12);
+        idle = CatArt.Idle(false);
 
         var rootGo = new GameObject("CatRoot");
         rootGo.transform.SetParent(transform, false);
@@ -68,7 +72,8 @@ public class CatCompanion : MonoBehaviour
 
         if (player != null)
         {
-            float feet = player.transform.position.y - 0.95f;
+            // Pivot is centred, so lift the root by half a cat to stand it ON the feet line.
+            float feet = player.transform.position.y - 0.95f + catHeight * 0.5f;
             catRoot.position = new Vector3(player.transform.position.x, feet, 0f);
             wanderTarget = catRoot.position;
         }
@@ -111,7 +116,8 @@ public class CatCompanion : MonoBehaviour
         SetVisible(true);
         if (walk.Length == 0) return;
 
-        Vector3 feet = new Vector3(player.transform.position.x, player.transform.position.y - 0.95f, 0f);
+        Vector3 feet = new Vector3(player.transform.position.x,
+            player.transform.position.y - 0.95f + catHeight * 0.5f, 0f);
 
         wanderTimer -= dt;
         if (wanderTimer <= 0f)
@@ -144,7 +150,9 @@ public class CatCompanion : MonoBehaviour
         }
         else
         {
-            sr.sprite = walk[0];
+            // Standing still: show the dedicated idle pose instead of frame 0 of the walk.
+            var still = idle != null ? idle : walk[0];
+            if (sr.sprite != still) sr.sprite = still;
             sr.transform.localPosition = Vector3.zero;
         }
 
