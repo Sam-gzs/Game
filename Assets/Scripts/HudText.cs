@@ -29,6 +29,16 @@ public class HudText : MonoBehaviour
     /// <summary>Key-cap art names for the current hint; null keeps the text panel.</summary>
     string[] keyCaps;
 
+    PlayerController player;
+
+    // Level 1 only: once the player reaches the first three-tall wall, the move/jump prompt
+    // is replaced by "hold left mouse to charge". That throw tutorial used to live in level 2
+    // and showed up long after the player had already met the wall.
+    string[] advanceKeys;
+    string advanceText;
+    float advanceAtX = float.MaxValue;
+    bool advanceShown;
+
     static readonly Dictionary<string, Texture2D> s_keyTextures = new Dictionary<string, Texture2D>();
 
     struct Hint
@@ -75,6 +85,72 @@ public class HudText : MonoBehaviour
             message = DefaultText;
             anchor = new Vector2(0.03f, 0.19f);
         }
+    }
+
+    void Start()
+    {
+        if (CurrentLevelIndex() != 0) return;   // the throw prompt is a level-1 thing
+
+        float wallX = FindFirstTallWallX();
+        if (wallX >= float.MaxValue) return;
+
+        advanceKeys = new[] { "mouse_left" };
+        advanceText = "按住左键蓄力";
+        advanceAtX = wallX - 3.5f;   // show it while the wall is still a couple of steps away
+    }
+
+    void Update()
+    {
+        if (advanceShown || advanceKeys == null) return;
+
+        if (player == null) player = Object.FindFirstObjectByType<PlayerController>();
+        if (player == null || player.transform.position.x < advanceAtX) return;
+
+        advanceShown = true;
+        keyCaps = advanceKeys;
+        message = advanceText;
+    }
+
+    /// <summary>
+    /// X of the first column that stacks three blockers - the wall the player has to break
+    /// with a thrown ball. Returns float.MaxValue when the level has none.
+    /// </summary>
+    static float FindFirstTallWallX()
+    {
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        var columns = new Dictionary<int, List<int>>();
+
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            var t = tiles[i];
+            if (t == null) continue;
+            if (t.type != TileType.Solid && t.type != TileType.Stone &&
+                t.type != TileType.Dirt && t.type != TileType.Wood) continue;
+
+            List<int> ys;
+            if (!columns.TryGetValue(t.cell.x, out ys))
+            {
+                ys = new List<int>();
+                columns[t.cell.x] = ys;
+            }
+            ys.Add(t.cell.y);
+        }
+
+        int best = int.MaxValue;
+        foreach (var kv in columns)
+        {
+            var ys = kv.Value;
+            ys.Sort();
+
+            int run = 1;
+            for (int k = 1; k < ys.Count; k++)
+            {
+                run = ys[k] == ys[k - 1] + 1 ? run + 1 : 1;
+                if (run >= 3 && kv.Key < best) { best = kv.Key; break; }
+            }
+            if (ys.Count >= 3 && run >= 3 && kv.Key < best) best = Mathf.Min(best, kv.Key);
+        }
+        return best == int.MaxValue ? float.MaxValue : best;
     }
 
     static int CurrentLevelIndex()

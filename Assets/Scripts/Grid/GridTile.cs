@@ -1042,9 +1042,6 @@ public class GridTile : MonoBehaviour
 
         ApplyLocalArt();
 
-        int speedPips = type == TileType.Stone ? 3 : type == TileType.Wood ? 2 : type == TileType.Dirt ? 1 : 0;
-        SetThresholdPips(speedPips);
-
         // Everything static shares one layer, so whichever instance happened to be created last
         // drew on top. The slime has to be the one on top: passing over a switch/plate must show
         // the slime covering it for a moment, never the switch swallowing the slime.

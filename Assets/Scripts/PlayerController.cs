@@ -41,7 +41,6 @@ public class PlayerController : MonoBehaviour
     bool charging;
     int jellyContacts;
     public float jellySlow = 0.35f;
-    LineRenderer aimLine;
     bool wasGrounded = true;   // spawn already counts as grounded: no landing thud on level start
     CatCompanion cat;
 
@@ -66,7 +65,7 @@ public class PlayerController : MonoBehaviour
         if (maxCharge < 1) maxCharge = 3;
         if (chargeStep <= 0.01f) chargeStep = 0.22f;
         if (jellySlow <= 0.01f) jellySlow = 0.35f;
-        CreateAimLine();
+        CreateAimDashes();
         ChargeBarUI.Ensure();
         rb.freezeRotation = true;
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
@@ -383,45 +382,151 @@ public class PlayerController : MonoBehaviour
     // Aim preview
     // ---------------------------------------------------------------------
 
-    void CreateAimLine()
+    // ---- aim preview ------------------------------------------------------
+    // 0.2-cell rounded pixel dashes (the pre-fork look): a pool of small sprite blocks,
+    // one per cell the ball would pass through.
+
+    const int AimSortingOrder = 30;
+    const int MaxDashBlocks = 192;
+    const int DashTexels = 20;
+    const float DashCornerRatio = 0.25f;
+
+    Transform dashRoot;
+    SpriteRenderer[] dashes;
+    static Sprite dashSprite;
+
+    [Tooltip("Edge length of one aim dash block, in cells.")]
+    public float dashBlockSize = 0.2f;
+
+    [Range(0.1f, 1f)] public float dashAlpha = 0.9f;
+
+    /// <summary>
+    /// Hard-edged rounded square. Every texel is either fully opaque or fully clear, so the
+    /// corner comes out as a stepped pixel-art cut instead of a smooth curve.
+    /// </summary>
+    static Sprite DashSprite()
     {
-        if (aimLine != null) return;
+        if (dashSprite != null) return dashSprite;
 
-        var go = new GameObject("AimLine");
-        go.transform.SetParent(transform, false);
-        aimLine = go.AddComponent<LineRenderer>();
-        aimLine.useWorldSpace = true;
-        aimLine.widthMultiplier = 0.08f;
-        aimLine.numCapVertices = 2;
-        aimLine.numCornerVertices = 2;
-        aimLine.textureMode = LineTextureMode.Stretch;
-        aimLine.alignment = LineAlignment.View;
-        aimLine.sortingOrder = 30;
+        const int n = DashTexels;
+        int r = Mathf.Clamp(Mathf.RoundToInt(n * DashCornerRatio), 1, n / 2);
 
-        Shader shader = Shader.Find("Sprites/Default");
-        if (shader == null) shader = Shader.Find("Unlit/Color");
-        if (shader != null)
+        var inset = new int[n];
+        for (int y = 0; y < n; y++)
         {
-            var mat = new Material(shader);
-            mat.color = Color.white;
-            aimLine.material = mat;
+            float dy = r - (y + 0.5f);
+            if (dy <= 0f) continue;
+            float dx = r - Mathf.Sqrt(Mathf.Max(0f, r * r - dy * dy));
+            inset[y] = Mathf.Clamp(Mathf.RoundToInt(dx), 0, r);
+        }
+        for (int y = 1; y < r; y++)
+            inset[y] = Mathf.Max(inset[y], inset[y - 1] - 1);
+
+        var tex = new Texture2D(n, n, TextureFormat.RGBA32, false)
+        {
+            name = "AimDashRounded",
+            filterMode = FilterMode.Point,
+            wrapMode = TextureWrapMode.Clamp
+        };
+
+        var px = new Color32[n * n];
+        var solid = new Color32(255, 255, 255, 255);
+        var clear = new Color32(255, 255, 255, 0);
+
+        for (int y = 0; y < n; y++)
+        {
+            int row = Mathf.Min(y, n - 1 - y);
+            int cut = inset[row];
+            for (int x = 0; x < n; x++)
+            {
+                int col = Mathf.Min(x, n - 1 - x);
+                px[y * n + x] = col >= cut ? solid : clear;
+            }
         }
 
-        aimLine.positionCount = 0;
-        aimLine.enabled = false;
+        tex.SetPixels32(px);
+        tex.Apply(false, false);
+
+        dashSprite = Sprite.Create(tex, new Rect(0f, 0f, n, n), new Vector2(0.5f, 0.5f), n,
+            0u, SpriteMeshType.FullRect);
+        dashSprite.name = "AimDashRounded";
+        return dashSprite;
+    }
+
+    void CreateAimDashes()
+    {
+        if (dashRoot != null) return;
+
+        var go = new GameObject("AimDashes");
+        go.transform.SetParent(transform, false);
+        dashRoot = go.transform;
+
+        var sprite = DashSprite();
+        dashes = new SpriteRenderer[MaxDashBlocks];
+        for (int i = 0; i < dashes.Length; i++)
+        {
+            var block = new GameObject("Dash" + i);
+            block.transform.SetParent(dashRoot, false);
+
+            var sr = block.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.sortingOrder = AimSortingOrder;
+            sr.enabled = false;
+            dashes[i] = sr;
+        }
     }
 
     void HideAimPreview()
     {
-        if (aimLine == null) return;
-        aimLine.positionCount = 0;
-        aimLine.enabled = false;
+        HideDashesFrom(0);
+    }
+
+    void HideDashesFrom(int first)
+    {
+        if (dashes == null) return;
+        for (int i = Mathf.Max(0, first); i < dashes.Length; i++)
+            if (dashes[i] != null && dashes[i].enabled) dashes[i].enabled = false;
+    }
+
+    /// <summary>
+    /// One block per preview point. The first point of BuildPreview is the player's own
+    /// position, so it is skipped - the trail must not draw a diagonal from the hand.
+    /// </summary>
+    void ShowDashes(List<Vector3> points, Color color)
+    {
+        CreateAimDashes();
+
+        int start = points.Count > 1 ? 1 : 0;
+        int count = Mathf.Min(points.Count - start, dashes.Length);
+        Vector3 size = Vector3.one * dashBlockSize;
+
+        for (int i = 0; i < count; i++)
+        {
+            var d = dashes[i];
+            d.transform.position = points[start + i];
+            d.transform.localScale = size;
+            d.color = color;
+            if (!d.enabled) d.enabled = true;
+        }
+
+        HideDashesFrom(count);
+    }
+
+    void ShowSingleBlock(Vector3 cell, Color color)
+    {
+        CreateAimDashes();
+
+        var d = dashes[0];
+        d.transform.position = cell;
+        d.transform.localScale = Vector3.one * dashBlockSize;
+        d.color = color;
+        d.enabled = true;
+
+        HideDashesFrom(1);
     }
 
     void UpdateAimPreview()
     {
-        if (aimLine == null) return;
-
         var mouse = Mouse.current;
         if (mouse == null || Camera.main == null || !Grounded)
         {
@@ -432,34 +537,23 @@ public class PlayerController : MonoBehaviour
         Vector2 world = ScreenToWorld(mouse);
         Vector2Int dir = AimDirection(world - (Vector2)transform.position);
         Vector2Int target = TargetCellFor(FeetCell(), dir);
-        bool canSpawn = BoxProjectile.CanSpawnAt(target);
+        int level = Mathf.Clamp(charge, 1, maxCharge);
 
-        aimLine.startColor = canSpawn
-            ? new Color(1f, 0.93f, 0.45f, 0.85f)
-            : new Color(1f, 0.35f, 0.30f, 0.85f);
-        aimLine.endColor = canSpawn
-            ? new Color(1f, 0.93f, 0.45f, 0.15f)
-            : new Color(1f, 0.35f, 0.30f, 0.15f);
-
-        if (!canSpawn)
+        if (!BoxProjectile.CanSpawnAt(target))
         {
-            aimLine.positionCount = 2;
-            aimLine.SetPosition(0, transform.position);
-            aimLine.SetPosition(1, Center(target));
-            aimLine.enabled = true;
+            // Nothing leaves the hand here: one ghosted block marks the refused cell.
+            ShowSingleBlock(Center(target), ChargePalette.Denied);
             return;
         }
 
-        var points = BuildPreview(target, dir, Mathf.Clamp(charge, 1, maxCharge));
+        var points = BuildPreview(target, dir, level);
         if (points.Count < 2)
         {
             HideAimPreview();
             return;
         }
 
-        aimLine.positionCount = points.Count;
-        aimLine.SetPositions(points.ToArray());
-        aimLine.enabled = true;
+        ShowDashes(points, ChargePalette.WithAlpha(ChargePalette.ForLevel(level), dashAlpha));
     }
 
     List<Vector3> BuildPreview(Vector2Int start, Vector2Int dir, int speed)
