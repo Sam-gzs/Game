@@ -65,7 +65,8 @@ public class HudText : MonoBehaviour
             new[] { "key_a", "key_d", "key_w" }),
         new Hint(1, "按住左键蓄力 1~3\n松开朝鼠标 8 向发射", new Vector2(0.03f, 0.19f),
             new[] { "mouse_left" }),
-        new Hint(2, "按 R 重试本关", new Vector2(0.03f, 0.82f)),
+        new Hint(2, "按 R 重试本关", new Vector2(0.03f, 0.82f),
+            new[] { "key_r" }),
         new Hint(3, "按住 Q 跟随球\n松开回到玩家", new Vector2(0.66f, 0.13f),
             new[] { "key_q" }),
     };

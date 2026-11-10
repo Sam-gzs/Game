@@ -21,13 +21,22 @@ NAMES = {
     "左键.png": "key_left",
     "左键鼠标.png": "mouse_left",
     "右键鼠标.png": "mouse_right",
+    "R键.png": "key_r",
 }
 
 
 def make_meta(path, w, h, ppu):
     with open(TEMPLATE, encoding="utf-8") as f:
         t = f.read()
-    t = re.sub(r"guid: [0-9a-f]{32}", "guid: %s" % uuid.uuid4().hex, t, count=1)
+    # Keep the existing GUID when the sprite is regenerated: a new GUID would orphan
+    # every prefab/scene that already points at the old one.
+    old_guid = None
+    if os.path.exists(path + ".meta"):
+        with open(path + ".meta", encoding="utf-8") as f:
+            m = re.search(r"guid: ([0-9a-f]{32})", f.read())
+            if m:
+                old_guid = m.group(1)
+    t = re.sub(r"guid: [0-9a-f]{32}", "guid: %s" % (old_guid or uuid.uuid4().hex), t, count=1)
     t = re.sub(r"spritePixelsToUnits: \d+", "spritePixelsToUnits: %d" % ppu, t)
     t = re.sub(r"spritePivot: \{x: [\d.]+, y: [\d.]+\}", "spritePivot: {x: 0.5, y: 0.5}", t)
     t = re.sub(r"        width: \d+\r?\n        height: \d+",
