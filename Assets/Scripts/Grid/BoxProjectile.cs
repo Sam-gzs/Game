@@ -71,6 +71,13 @@ public class BoxProjectile : MonoBehaviour
     [Tooltip("World-space diameter of the cat ball. Keep it equal to CatCompanion.catHeight so the stopped cat and the cat block match.")]
     public float catBallSize = 1.0f;
 
+    [Tooltip("Extra scale for the orange cat. Its art is cropped narrower than the grey-white " +
+             "cat (0.84 wide vs 1.14 at the same height), so it needs a nudge to read as the same size.")]
+    public float orangeCatScale = 1.25f;
+
+    /// <summary>1 for the grey-white cat, orangeCatScale for the orange one.</summary>
+    float catScaleMul = 1f;
+
     Vector3 fromPos;
     Vector3 toPos;
     float t;
@@ -160,6 +167,7 @@ public class BoxProjectile : MonoBehaviour
         box.catRoll = roll;
         box.catStuck = useLocal ? CatArt.Stuck(orange) : null;
         box.localCat = useLocal;
+        box.catScaleMul = orange ? box.orangeCatScale : 1f;
         box.SetCatScale(first);
         box.PressButtonAt(cell);
         box.ApplyJellyAt(cell);
@@ -202,6 +210,12 @@ public class BoxProjectile : MonoBehaviour
         if (sr == null || s == null) return;
         float h = s.rect.height / Mathf.Max(1f, s.pixelsPerUnit);
         float k = catBallSize / Mathf.Max(0.001f, h);
+
+        // Only the parked frame needs the nudge. The roll and stuck frames are cropped the
+        // same for both cats; the standing frames are not (0.84 vs 1.14 wide at one unit tall).
+        if (catScaleMul != 1f && catIdle != null && catIdle.Length > 0 && s == catIdle[0])
+            k *= catScaleMul;
+
         sr.transform.localScale = new Vector3(k, k, 1f);
     }
 

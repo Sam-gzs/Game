@@ -16,6 +16,15 @@ public class CatCompanion : MonoBehaviour
 
     [Tooltip("How tall the cat should be, in world units.")]
     public float catHeight = 1.0f;
+
+    /// <summary>
+    /// Extra scale applied to the orange cat's STANDING frame. The two art drops are cropped
+    /// differently: at the same world height the grey-white stand is 1.14 wide while the
+    /// orange one is 0.84, so without this the orange cat reads as the smaller of the two.
+    /// Walk frames are already cropped identically and are left alone.
+    /// </summary>
+    public float orangeIdleScale = 1.25f;
+
     public float wanderRadius = 1.3f;
     public float moveSpeed = 1.5f;
     public int sortingOrder = 7;
@@ -26,6 +35,10 @@ public class CatCompanion : MonoBehaviour
         public SpriteRenderer sr;
         public Sprite[] walk;
         public Sprite idle;
+        public float walkScale;
+        public float idleScale;
+        public float walkLift;   // half a walk frame's height: puts its bottom on the floor line
+        public float idleLift;
         public Vector3 wanderTarget;
         public float wanderTimer;
         public float frameTimer;
@@ -82,23 +95,47 @@ public class CatCompanion : MonoBehaviour
         unit.sr.enabled = false;
 
         Sprite first = (walk != null && walk.Length > 0) ? walk[0] : unit.idle;
+        Sprite still = unit.idle != null ? unit.idle : first;
+
+        // Walk frames are cropped identically for both cats, so they keep the plain height.
+        // Only the standing frame needs the orange nudge.
+        unit.walkScale = ScaleFor(first, false);
+        unit.walkLift = HeightOf(first, unit.walkScale) * 0.5f;
+        unit.idleScale = ScaleFor(still, orange);
+        unit.idleLift = HeightOf(still, unit.idleScale) * 0.5f;
+
         if (first != null)
         {
             unit.sr.sprite = first;
-            float h = first.rect.height / Mathf.Max(1f, first.pixelsPerUnit);
-            float s = catHeight / Mathf.Max(0.001f, h);
-            visual.transform.localScale = new Vector3(s, s, 1f);
+            visual.transform.localScale = new Vector3(unit.walkScale, unit.walkScale, 1f);
+            visual.transform.localPosition = new Vector3(0f, unit.walkLift, 0f);
         }
 
         if (player != null)
         {
-            // Pivot is centred, so lift the root by half a cat to stand it ON the feet line.
-            float feet = player.transform.position.y - 0.95f + catHeight * 0.5f;
+            // The root sits on the floor line; the sprite is lifted by half its own height.
+            float feet = player.transform.position.y - 0.95f;
             unit.root.position = new Vector3(player.transform.position.x + OffsetX(index), feet, 0f);
         }
         unit.wanderTarget = unit.root.position;
         unit.wanderTimer = 0.35f + index * 0.4f;
         return unit;
+    }
+
+    /// <summary>Scale that renders this sprite at catHeight (plus the orange standing nudge).</summary>
+    float ScaleFor(Sprite s, bool orange)
+    {
+        if (s == null) return 1f;
+        float h = s.rect.height / Mathf.Max(1f, s.pixelsPerUnit);
+        float k = catHeight / Mathf.Max(0.001f, h);
+        if (orange) k *= orangeIdleScale;
+        return k;
+    }
+
+    static float HeightOf(Sprite s, float scale)
+    {
+        if (s == null) return 0f;
+        return s.rect.height / Mathf.Max(1f, s.pixelsPerUnit) * scale;
     }
 
     /// <summary>Keeps the group spread out instead of stacking on one spot.</summary>
@@ -140,8 +177,7 @@ public class CatCompanion : MonoBehaviour
         int balls = BoxProjectile.Count;
         int capacity = Mathf.Clamp(player.boxCapacity, 0, units.Count);
 
-        var feet = new Vector3(player.transform.position.x,
-            player.transform.position.y - 0.95f + catHeight * 0.5f, 0f);
+        float footLine = player.transform.position.y - 0.95f;
 
         for (int i = 0; i < units.Count; i++)
         {
@@ -149,11 +185,11 @@ public class CatCompanion : MonoBehaviour
             var unit = units[i];
             if (unit.sr != null && unit.sr.enabled != show) unit.sr.enabled = show;
             if (!show) continue;
-            Follow(unit, i, feet, dt);
+            Follow(unit, i, footLine, dt);
         }
     }
 
-    void Follow(CatUnit unit, int index, Vector3 feet, float dt)
+    void Follow(CatUnit unit, int index, float footLine, float dt)
     {
         if (unit.walk == null || unit.walk.Length == 0) return;
 
@@ -161,13 +197,14 @@ public class CatCompanion : MonoBehaviour
         if (unit.wanderTimer <= 0f)
         {
             unit.wanderTimer = Random.Range(1.1f, 2.6f);
-            float cx = feet.x + OffsetX(index);
-            unit.wanderTarget = new Vector3(cx + Random.Range(-wanderRadius, wanderRadius), feet.y, 0f);
+            float cx = unit.root.position.x;
+            unit.wanderTarget = new Vector3(cx + Random.Range(-wanderRadius, wanderRadius), footLine, 0f);
         }
 
         // If the player walks away, the cat gives up its old spot and catches up.
-        if (Mathf.Abs(unit.root.position.x - feet.x) > wanderRadius * 1.7f)
-            unit.wanderTarget = new Vector3(feet.x + OffsetX(index), feet.y, 0f);
+        float playerX = player.transform.position.x;
+        if (Mathf.Abs(unit.root.position.x - playerX) > wanderRadius * 1.7f)
+            unit.wanderTarget = new Vector3(playerX + OffsetX(index), footLine, 0f);
 
         float dx = unit.wanderTarget.x - unit.root.position.x;
         if (Mathf.Abs(dx) > 0.03f)
@@ -175,28 +212,37 @@ public class CatCompanion : MonoBehaviour
             // Right after being let in it sprints, so it visibly runs out of the gap to the player.
             float speed = catchUp > 0f ? moveSpeed * 2.5f : moveSpeed;
             float nx = Mathf.MoveTowards(unit.root.position.x, unit.wanderTarget.x, speed * dt);
-            unit.root.position = new Vector3(nx, feet.y, 0f);
+            unit.root.position = new Vector3(nx, footLine, 0f);
 
             unit.sr.flipX = dx > 0f;
             unit.frameTimer += dt;
-            if (unit.frameTimer >= 0.2f)
+            if (unit.frameTimer >= CatArt.FrameTime)
             {
                 unit.frameTimer = 0f;
                 unit.frame = (unit.frame + 1) % unit.walk.Length;
             }
             unit.sr.sprite = unit.walk[unit.frame];
+            ApplySpriteScale(unit, unit.walkScale);
             unit.sr.transform.localPosition =
-                new Vector3(0f, Mathf.Abs(Mathf.Sin(Time.time * 14f + index)) * 0.015f, 0f);
+                new Vector3(0f, unit.walkLift + Mathf.Abs(Mathf.Sin(Time.time * 14f + index)) * 0.015f, 0f);
         }
         else
         {
             // Standing still: show the dedicated idle pose instead of frame 0 of the walk.
             var still = unit.idle != null ? unit.idle : unit.walk[0];
             if (unit.sr.sprite != still) unit.sr.sprite = still;
-            unit.sr.transform.localPosition = Vector3.zero;
+            ApplySpriteScale(unit, unit.idleScale);
+            unit.sr.transform.localPosition = new Vector3(0f, unit.idleLift, 0f);
         }
 
-        unit.root.position = new Vector3(unit.root.position.x, feet.y, 0f);
+        unit.root.position = new Vector3(unit.root.position.x, footLine, 0f);
+    }
+
+    void ApplySpriteScale(CatUnit unit, float scale)
+    {
+        if (unit.sr == null) return;
+        var t = unit.sr.transform;
+        if (!Mathf.Approximately(t.localScale.x, scale)) t.localScale = new Vector3(scale, scale, 1f);
     }
 
     void HideAll()
@@ -214,9 +260,9 @@ public class CatCompanion : MonoBehaviour
         {
             int index = Mathf.Clamp(BoxProjectile.Count, 0, units.Count - 1);
             var unit = units[index];
-            float feet = player.transform.position.y - 0.95f + catHeight * 0.5f;
+            float feet = player.transform.position.y - 0.95f;
             unit.root.position = new Vector3(player.transform.position.x + player.Facing * 0.7f, feet, 0f);
-            unit.sr.transform.localPosition = Vector3.zero;
+            unit.sr.transform.localPosition = new Vector3(0f, unit.walkLift, 0f);
             unit.sr.enabled = false;
         }
 
