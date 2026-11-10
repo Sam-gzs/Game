@@ -83,8 +83,8 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 1
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: 89fa2722c0999304d9ed12544de71ecb, type: 3}
-  m_Color: {r: 0.2, g: 0.23, b: 0.31, a: 1}
+  m_Sprite: {fileID: 21300000, guid: 25c8485dd1f2047b666da7e1b71d1d85, type: 3}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
@@ -159,6 +159,7 @@ MonoBehaviour:
   channel: 1
   invert: 0
   mirrorDown: 1
+  refractFacing: 0
   springFacing: 3
   catTriggerActor: 0
   tutorialText: TEXT
