@@ -64,5 +64,41 @@ public class LevelBootstrap : MonoBehaviour
         // The spawn tile is only a placement marker. It must not stay in the grid,
         // otherwise BoxProjectile.IsFree treats it as a solid and blocks throws.
         if (spawn != null) Destroy(spawn.gameObject);
+
+        EnsureBackdrop();
+    }
+
+    /// <summary>
+    /// The room backdrop rides on the camera (so it scrolls with the view) and is scaled to
+    /// cover the whole view at any aspect ratio. Missing art simply means no backdrop.
+    /// </summary>
+    void EnsureBackdrop()
+    {
+        var cam = Camera.main;
+        if (cam == null) return;
+
+        var sprite = BlockArt.Get("bg_room");
+        if (sprite == null) return;
+
+        var existing = cam.transform.Find("Backdrop");
+        GameObject go = existing != null ? existing.gameObject : new GameObject("Backdrop");
+
+        if (existing == null)
+        {
+            go.transform.SetParent(cam.transform, false);
+            // one unit in front of the lens, so it sits inside the near plane
+            go.transform.localPosition = new Vector3(0f, 0f, 1f);
+
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.sortingOrder = -100;   // always behind the level tiles
+        }
+
+        float viewHeight = cam.orthographicSize * 2f;
+        float viewWidth = viewHeight * cam.aspect;
+        Vector2 art = go.GetComponent<SpriteRenderer>().sprite.bounds.size;
+        float scale = Mathf.Max(viewWidth / Mathf.Max(0.01f, art.x),
+                                viewHeight / Mathf.Max(0.01f, art.y));
+        go.transform.localScale = new Vector3(scale, scale, 1f);
     }
 }

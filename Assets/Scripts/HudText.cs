@@ -112,44 +112,64 @@ public class HudText : MonoBehaviour
     }
 
     /// <summary>
-    /// X of the first column that stacks three blockers - the wall the player has to break
-    /// with a thrown ball. Returns float.MaxValue when the level has none.
+    /// X of the first column whose stack of tiles ABOVE the floor is three tall - the first
+    /// wall the player cannot simply walk or jump over. The level frame is ignored on
+    /// purpose: the floor row, the ceiling row and the two side walls are the outline, not
+    /// an obstacle. A two-tall step must therefore not count as three just because the
+    /// floor tile underneath it is included.
     /// </summary>
     static float FindFirstTallWallX()
     {
         var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
-        var columns = new Dictionary<int, List<int>>();
+        if (tiles.Length == 0) return float.MaxValue;
+
+        var columns = new Dictionary<int, SortedSet<int>>();
+        int floorY = int.MaxValue, ceilY = int.MinValue;
 
         for (int i = 0; i < tiles.Length; i++)
         {
             var t = tiles[i];
             if (t == null) continue;
-            if (t.type != TileType.Solid && t.type != TileType.Stone &&
-                t.type != TileType.Dirt && t.type != TileType.Wood) continue;
 
-            List<int> ys;
+            SortedSet<int> ys;
             if (!columns.TryGetValue(t.cell.x, out ys))
             {
-                ys = new List<int>();
+                ys = new SortedSet<int>();
                 columns[t.cell.x] = ys;
             }
             ys.Add(t.cell.y);
+
+            if (t.cell.y < floorY) floorY = t.cell.y;
+            if (t.cell.y > ceilY) ceilY = t.cell.y;
         }
 
+        int span = ceilY - floorY + 1;
         int best = int.MaxValue;
+
         foreach (var kv in columns)
         {
-            var ys = kv.Value;
-            ys.Sort();
+            // A side wall fills the whole frame; it is part of the outline, never the wall
+            // the prompt is about.
+            if (span > 0 && kv.Value.Count >= span) continue;
 
-            int run = 1;
-            for (int k = 1; k < ys.Count; k++)
+            int run = 0, bestRun = 0, prev = int.MinValue;
+            foreach (int y in kv.Value)
             {
-                run = ys[k] == ys[k - 1] + 1 ? run + 1 : 1;
-                if (run >= 3 && kv.Key < best) { best = kv.Key; break; }
+                if (y <= floorY || y >= ceilY)
+                {
+                    run = 0;
+                    prev = y;
+                    continue;
+                }
+
+                run = prev == y - 1 ? run + 1 : 1;
+                if (run > bestRun) bestRun = run;
+                prev = y;
             }
-            if (ys.Count >= 3 && run >= 3 && kv.Key < best) best = Mathf.Min(best, kv.Key);
+
+            if (bestRun >= 3 && kv.Key < best) best = kv.Key;
         }
+
         return best == int.MaxValue ? float.MaxValue : best;
     }
 

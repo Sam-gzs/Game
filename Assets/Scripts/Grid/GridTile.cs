@@ -151,8 +151,6 @@ public class GridTile : MonoBehaviour
 
     SpriteRenderer sr;
     BoxCollider2D col;
-    Transform pipsRoot;
-    SpriteRenderer[] pips;
 
     bool falling;
     float fallT;
@@ -666,72 +664,6 @@ public class GridTile : MonoBehaviour
         if (t == TileType.Wood) return 2;
         if (t == TileType.Stone) return 3;
         return 0;
-    }
-
-    /// <summary>Small white pips at the bottom of a block show the required ball speed.</summary>
-    void SetThresholdPips(int count)
-    {
-        // OnValidate runs on every import / domain reload, on scene objects and on the prefab
-        // asset. Creating children there dirties scenes and throws as soon as a serialized
-        // reference has gone stale - so the pips are generated at runtime only.
-        if (!Application.isPlaying) return;
-
-        if (pipsRoot == null)
-        {
-            var existing = transform.Find("ThresholdPips");
-            if (existing != null) pipsRoot = existing;
-        }
-        if (pipsRoot == null)
-        {
-            var go = new GameObject("ThresholdPips");
-            go.transform.SetParent(transform, false);
-            pipsRoot = go.transform;
-        }
-
-        bool stale = pips == null || pips.Length != 3;
-        if (!stale)
-        {
-            for (int i = 0; i < pips.Length; i++)
-            {
-                if (pips[i] == null) { stale = true; break; }
-            }
-        }
-
-        if (stale)
-        {
-            var list = new System.Collections.Generic.List<SpriteRenderer>();
-            for (int i = 0; i < pipsRoot.childCount; i++)
-            {
-                var c = pipsRoot.GetChild(i);
-                var s = c.GetComponent<SpriteRenderer>();
-                if (s != null) list.Add(s);
-            }
-            while (list.Count < 3)
-            {
-                var go = new GameObject("pip");
-                go.transform.SetParent(pipsRoot, false);
-                var s = go.AddComponent<SpriteRenderer>();
-                s.sprite = baseSprite;
-                s.color = new Color(1f, 0.96f, 0.75f, 1f);
-                s.sortingOrder = 2;
-                list.Add(s);
-            }
-            pips = list.ToArray();
-        }
-
-        if (baseSprite != null)
-        {
-            for (int i = 0; i < pips.Length; i++) pips[i].sprite = baseSprite;
-        }
-
-        for (int i = 0; i < pips.Length; i++)
-        {
-            var p = pips[i];
-            p.transform.localScale = Vector3.one * 0.12f;
-            p.transform.localPosition = new Vector3((i - (count - 1) * 0.5f) * 0.18f, -0.33f, 0f);
-            p.enabled = i < count;
-        }
-        pipsRoot.gameObject.SetActive(count > 0);
     }
 
     void PlateTick()
