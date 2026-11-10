@@ -60,8 +60,6 @@ public class BoxProjectile : MonoBehaviour
     // The cat is the ball's skin: idle frames while it is parked, roll frames while it moves.
     Sprite[] catIdle;
     Sprite[] catRoll;
-    Sprite[] catStuck;
-    bool localCat;          // true when the art drop's cat sprites are in use
     float catAnim;
     float catIdleAnim;
 
@@ -123,19 +121,8 @@ public class BoxProjectile : MonoBehaviour
         csr.sortingOrder = 6;
         if (material != null) csr.sharedMaterial = material;
 
-        // Two cats queue up by ownership: with one cat available it is always the
-        // grey one; after the pickup (capacity > 1) the first ball in the world is
-        // grey and the second is orange.
-        var player = Object.FindFirstObjectByType<PlayerController>();
-        bool orange = Count > 0 && player != null && player.boxCapacity > 1;
-
-        bool useLocal = CatArt.Idle(false) != null;
-        var idle = useLocal
-            ? new Sprite[] { CatArt.Idle(orange) }
-            : LoadSequence("CatIdle", 6);
-        var roll = useLocal
-            ? (CatArt.Roll(orange) ?? LoadSequence("CatRoll", 20))
-            : LoadSequence("CatRoll", 20);
+        var idle = LoadSequence("CatIdle", 6);
+        var roll = LoadSequence("CatRoll", 20);
         Sprite first = idle.Length > 0 ? idle[0] : (roll.Length > 0 ? roll[0] : ballSprite);
         if (first == null) first = sprite;
         csr.sprite = first;
@@ -158,8 +145,6 @@ public class BoxProjectile : MonoBehaviour
         box.sr = csr;
         box.catIdle = idle;
         box.catRoll = roll;
-        box.catStuck = useLocal ? CatArt.Stuck(orange) : null;
-        box.localCat = useLocal;
         box.SetCatScale(first);
         box.PressButtonAt(cell);
         box.ApplyJellyAt(cell);
@@ -215,7 +200,6 @@ public class BoxProjectile : MonoBehaviour
     void UpdateCatVisual()
     {
         if (sr == null) return;
-        if (localCat) { UpdateLocalCatVisual(); return; }
 
         bool active = moving || falling || sliding;
         if (active && catRoll != null && catRoll.Length > 0)
@@ -238,40 +222,6 @@ public class BoxProjectile : MonoBehaviour
             sr.sprite = catIdle[f];
             SetCatScale(sr.sprite);
             sr.transform.localRotation = Quaternion.identity;
-        }
-    }
-
-    /// <summary>
-    /// Local cat art: the GIF clips play at their native 200 ms per frame. The
-    /// slime-stuck blink and the grey/orange skin come from the art drop, while
-    /// the fork's rotation / flip is kept while the ball is rolling.
-    /// </summary>
-    void UpdateLocalCatVisual()
-    {
-        bool active = moving || falling || sliding;
-        Sprite[] clip = stuck ? catStuck : (active ? catRoll : catIdle);
-        if (clip == null || clip.Length == 0) clip = catIdle;
-        if (clip == null || clip.Length == 0) return;
-
-        catAnim += Time.deltaTime;
-        int f = Mathf.FloorToInt(catAnim / CatArt.FrameTime) % clip.Length;
-        if (sr.sprite != clip[f])
-        {
-            sr.sprite = clip[f];
-            SetCatScale(sr.sprite);
-        }
-
-        if (active && clip == catRoll)
-        {
-            float ax = Mathf.Abs(Direction.x);
-            float angle = Mathf.Atan2(Direction.y, ax) * Mathf.Rad2Deg + rollAngleOffset;
-            sr.transform.localRotation = Quaternion.Euler(0f, 0f, angle);
-            sr.flipX = Direction.x < 0f;
-        }
-        else
-        {
-            sr.transform.localRotation = Quaternion.identity;
-            sr.flipX = false;
         }
     }
 

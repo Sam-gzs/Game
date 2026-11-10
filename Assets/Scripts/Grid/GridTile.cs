@@ -31,18 +31,22 @@ public enum TileType
 }
 
 /// <summary>
-/// The four rotations of the refractor's blue-grey triangular BODY.  The name is
-/// literally the corner the solid wedge occupies (LeftUp = wedge in the top-left,
-/// etc.), which is what the art shows and what decides which side the ball hits.
+/// Which corner the SOLID blue-grey triangle occupies.  That triangle is the BODY of
+/// the refractor: the ball must always arrive on the empty side and never shoot into
+/// the solid wedge.  The four positions give these trajectories (enter -> leave):
+///   SolidTopLeft      "/"    up    -> right,  left -> down
+///   SolidBottomLeft   "\"    left  -> up,     down -> right
+///   SolidTopRight     "\"    right -> down,   up   -> left
+///   SolidBottomRight  "/"    right -> up,     down -> left
 /// Auto keeps the fork's original two-diagonal art (BlockRefractUp / Down).
 /// </summary>
 public enum RefractFacing
 {
     Auto = 0,
-    LeftUp,
-    LeftDown,
-    RightUp,
-    RightDown
+    SolidTopLeft,
+    SolidBottomLeft,
+    SolidTopRight,
+    SolidBottomRight
 }
 
 /// <summary>Who is allowed to set a CatTrigger off.</summary>
@@ -1072,23 +1076,21 @@ public class GridTile : MonoBehaviour
     {
         switch (refractFacing)
         {
-            // Wedge corner -> sprite.  mirror_<xy> is named after the ORIGINAL art's
-            // rotation, so the mapping below is deliberately a 180-degree swap of the
-            // naive name match (e.g. RightUp must show the wedge in the top-right,
-            // which is mirror_ld, not mirror_ru).
-            case RefractFacing.LeftUp:      // wedge top-left,    "/" hypotenuse
+            // Solid corner -> sprite.  mirror_<xy> is named after the original art's
+            // rotation, so this is not a naive name match.
+            case RefractFacing.SolidTopLeft:      // solid top-left,    "/" hypotenuse
                 if (s_wedgeLU == null) s_wedgeLU = Resources.Load<Sprite>("Blocks/mirror_rd");
                 if (s_wedgeLU != null) return s_wedgeLU;
                 break;
-            case RefractFacing.LeftDown:    // wedge bottom-left, "\" hypotenuse
+            case RefractFacing.SolidBottomLeft:   // solid bottom-left, "\" hypotenuse
                 if (s_wedgeLD == null) s_wedgeLD = Resources.Load<Sprite>("Blocks/mirror_ru");
                 if (s_wedgeLD != null) return s_wedgeLD;
                 break;
-            case RefractFacing.RightUp:     // wedge top-right,   "\" hypotenuse
+            case RefractFacing.SolidTopRight:     // solid top-right,   "\" hypotenuse
                 if (s_wedgeRU == null) s_wedgeRU = Resources.Load<Sprite>("Blocks/mirror_ld");
                 if (s_wedgeRU != null) return s_wedgeRU;
                 break;
-            case RefractFacing.RightDown:   // wedge bottom-right, "/" hypotenuse
+            case RefractFacing.SolidBottomRight:  // solid bottom-right, "/" hypotenuse
                 if (s_wedgeRD == null) s_wedgeRD = Resources.Load<Sprite>("Blocks/mirror_lu");
                 if (s_wedgeRD != null) return s_wedgeRD;
                 break;

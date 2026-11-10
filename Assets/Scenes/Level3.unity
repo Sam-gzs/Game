@@ -1808,7 +1808,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4787664844730550091, guid: 740e53e39fcf09c4ea488d60a6ffbafd, type: 3}
       propertyPath: refractFacing
-      value: 3
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4787664844730550091, guid: 740e53e39fcf09c4ea488d60a6ffbafd, type: 3}
       propertyPath: cell.x
@@ -3320,7 +3320,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4787664844730550091, guid: 740e53e39fcf09c4ea488d60a6ffbafd, type: 3}
       propertyPath: refractFacing
-      value: 3
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4787664844730550091, guid: 740e53e39fcf09c4ea488d60a6ffbafd, type: 3}
       propertyPath: cell.x
@@ -8493,7 +8493,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4787664844730550091, guid: 740e53e39fcf09c4ea488d60a6ffbafd, type: 3}
       propertyPath: refractFacing
-      value: 3
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4787664844730550091, guid: 740e53e39fcf09c4ea488d60a6ffbafd, type: 3}
       propertyPath: cell.x

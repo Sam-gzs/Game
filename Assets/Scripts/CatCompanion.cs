@@ -47,9 +47,7 @@ public class CatCompanion : MonoBehaviour
         Current = this;
         if (player == null) player = GetComponentInParent<PlayerController>();
 
-        // The following cat uses the grey-white cat from the art drop; the fork's
-        // CatWalk sequence remains the fallback.
-        walk = CatArt.Walk(false) ?? LoadSequence("CatWalk", 12);
+        walk = LoadSequence("CatWalk", 12);
 
         var rootGo = new GameObject("CatRoot");
         rootGo.transform.SetParent(transform, false);
