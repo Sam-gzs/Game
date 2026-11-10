@@ -102,11 +102,8 @@ public class MainMenu : MonoBehaviour
 
     public void QuitGame()
     {
-#if UNITY_EDITOR
-        UnityEditor.EditorApplication.isPlaying = false;
-#else
-        Application.Quit();
-#endif
+        UiTone.Click();
+        GameFlow.QuitGame();
     }
 
     /// <summary>Rebuild the grid of level buttons so any number of levels fits.</summary>

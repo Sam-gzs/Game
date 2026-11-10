@@ -43,6 +43,17 @@ public static class GameFlow
         SceneManager.LoadScene(MenuSceneName);
     }
 
+    /// <summary>Quit from anywhere. In the editor this just stops Play mode.</summary>
+    public static void QuitGame()
+    {
+        Time.timeScale = 1f;
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
+    }
+
     public static void LoadLevel(int index)
     {
         index = Mathf.Clamp(index, 0, LevelCount - 1);

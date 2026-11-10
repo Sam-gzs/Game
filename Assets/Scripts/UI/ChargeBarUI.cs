@@ -31,9 +31,9 @@ public class ChargeBarUI : MonoBehaviour
         var canvas = UIFactory.CreateCanvas("ChargeBarCanvas");
 
         var rt = UIFactory.Rect(canvas.transform, "ChargeBar");
-        rt.anchorMin = rt.anchorMax = Vector2.zero;     // bottom left of the screen
-        rt.pivot = Vector2.zero;
-        rt.anchoredPosition = Margin;
+        rt.anchorMin = rt.anchorMax = Vector2.up;       // top left of the screen
+        rt.pivot = Vector2.up;
+        rt.anchoredPosition = new Vector2(Margin.x, -Margin.y);
 
         var img = rt.gameObject.AddComponent<Image>();
         img.raycastTarget = false;                      // the HUD must never eat a click

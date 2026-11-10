@@ -30,6 +30,20 @@ public enum TileType
     CatExit          // colourless marker: where the cat waits before it is let in
 }
 
+/// <summary>
+/// The four rotations of the refractor's blue-grey triangular body.  The name reads
+/// as the corner the wedge sits in: RightUp reflects a ball towards the upper right.
+/// Auto keeps the fork's original two-diagonal art (BlockRefractUp / Down).
+/// </summary>
+public enum RefractFacing
+{
+    Auto = 0,
+    LeftUp,
+    LeftDown,
+    RightUp,
+    RightDown
+}
+
 /// <summary>Who is allowed to set a CatTrigger off.</summary>
 public enum CatTriggerActor
 {
@@ -72,6 +86,11 @@ public class GridTile : MonoBehaviour
 
     [Tooltip("Mirror: true = '\\', false = '/'. A channel signal sets it to '/' when on.")]
     public bool mirrorDown = true;
+
+    [Header("Refractor art")]
+    [Tooltip("Auto = the fork's two-diagonal art. An explicit value uses the matching " +
+             "four-way wedge sprite (Resources/Blocks/mirror_*).")]
+    public RefractFacing refractFacing = RefractFacing.Auto;
 
     [Header("Spring (TileType.Bounce)")]
     [Tooltip("Which side of the spring faces the ball. The spring only gives along this axis: " +
@@ -1031,9 +1050,36 @@ public class GridTile : MonoBehaviour
 
     static Sprite s_refractDown;
     static Sprite s_refractUp;
+    static Sprite s_wedgeLU, s_wedgeLD, s_wedgeRU, s_wedgeRD;
 
-    static Sprite RefractorSprite(TileType t)
+    /// <summary>
+    /// Fork art (BlockRefractUp / BlockRefractDown) stays the default.  A tile that
+    /// explicitly picks one of the four wedge rotations uses mirror_lu / mirror_ld /
+    /// mirror_ru / mirror_rd instead; if that sprite is missing we fall back to the
+    /// fork art so the level never renders a blank cell.
+    /// </summary>
+    Sprite RefractorSprite(TileType t)
     {
+        switch (refractFacing)
+        {
+            case RefractFacing.LeftUp:
+                if (s_wedgeLU == null) s_wedgeLU = Resources.Load<Sprite>("Blocks/mirror_lu");
+                if (s_wedgeLU != null) return s_wedgeLU;
+                break;
+            case RefractFacing.LeftDown:
+                if (s_wedgeLD == null) s_wedgeLD = Resources.Load<Sprite>("Blocks/mirror_ld");
+                if (s_wedgeLD != null) return s_wedgeLD;
+                break;
+            case RefractFacing.RightUp:
+                if (s_wedgeRU == null) s_wedgeRU = Resources.Load<Sprite>("Blocks/mirror_ru");
+                if (s_wedgeRU != null) return s_wedgeRU;
+                break;
+            case RefractFacing.RightDown:
+                if (s_wedgeRD == null) s_wedgeRD = Resources.Load<Sprite>("Blocks/mirror_rd");
+                if (s_wedgeRD != null) return s_wedgeRD;
+                break;
+        }
+
         if (t == TileType.RefractorDown)
         {
             if (s_refractDown == null) s_refractDown = Resources.Load<Sprite>("BlockRefractDown");

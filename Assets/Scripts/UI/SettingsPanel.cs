@@ -5,7 +5,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// One settings overlay for the whole game: opened from the main menu (设置 button),
-/// or from inside a level with ESC. In a level it also offers "restart level" and
+/// or from inside a level with ESC. On the menu ESC quits the game instead of
+/// opening this panel. In a level it also offers "restart level" and
 /// "back to main menu". While open the game is paused (Time.timeScale = 0) and the
 /// previous time scale is restored on close, so it can also be opened on top of the
 /// level-complete panel without unfreezing it.
@@ -115,8 +116,11 @@ public class SettingsPanel : MonoBehaviour
 
         if (kb.escapeKey.wasPressedThisFrame)
         {
+            // ESC always closes the overlay first. In a level it opens the settings,
+            // but on the main menu / level select it quits the game instead.
             if (isOpen) Close();
-            else Open();
+            else if (InLevel()) Open();
+            else GameFlow.QuitGame();
         }
     }
 

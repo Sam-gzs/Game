@@ -16,7 +16,8 @@ public class HudText : MonoBehaviour
     public bool useDefaults = true;
 
     GUIStyle style;
-    Vector2 anchor = new Vector2(0.03f, 0.04f);
+    // Top-left hints sit below the charge bar (which is ~60 px tall at 1080p).
+    Vector2 anchor = new Vector2(0.03f, 0.19f);
 
     struct Hint
     {
@@ -36,8 +37,8 @@ public class HudText : MonoBehaviour
     // Coordinates are viewport (0..1) with (0,0) at the top-left.
     static readonly Hint[] Hints =
     {
-        new Hint(0, "A / D  移动\nW / SPACE  跳跃", new Vector2(0.03f, 0.13f)),
-        new Hint(1, "按住左键蓄力 1~3\n松开朝鼠标 8 向发射", new Vector2(0.03f, 0.13f)),
+        new Hint(0, "A / D  移动\nW / SPACE  跳跃", new Vector2(0.03f, 0.19f)),
+        new Hint(1, "按住左键蓄力 1~3\n松开朝鼠标 8 向发射", new Vector2(0.03f, 0.19f)),
         new Hint(2, "按 R 重试本关", new Vector2(0.03f, 0.82f)),
         new Hint(3, "按住 Q 跟随球\n松开回到玩家", new Vector2(0.66f, 0.13f)),
     };
@@ -54,7 +55,7 @@ public class HudText : MonoBehaviour
         else if (useDefaults)
         {
             message = DefaultText;
-            anchor = new Vector2(0.03f, 0.04f);
+            anchor = new Vector2(0.03f, 0.19f);
         }
     }
 
