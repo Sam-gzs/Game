@@ -83,8 +83,10 @@ public class HudText : MonoBehaviour
         }
         else if (useDefaults)
         {
-            message = DefaultText;
-            anchor = new Vector2(0.03f, 0.19f);
+            // Levels past the tutorial used to fall back to one long line of English text.
+            // Nothing is drawn there any more: the HUD only carries the key-cap prompts.
+            message = string.Empty;
+            keyCaps = null;
         }
     }
 
@@ -203,6 +205,9 @@ public class HudText : MonoBehaviour
     {
         // Art first: when the hint has key caps they replace the text panel entirely.
         if (DrawKeyCaps()) return;
+
+        // No hint for this level: draw nothing at all rather than an empty panel.
+        if (string.IsNullOrEmpty(message)) return;
 
         if (style == null)
         {

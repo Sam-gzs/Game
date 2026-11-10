@@ -27,7 +27,6 @@ public class SettingsPanel : MonoBehaviour
     const float ResumeFromTop = 300f;
     const float RestartFromTop = 405f;
     const float MenuFromTop = 510f;
-    const float HintFromBottom = 34f;
 
     static readonly Color DimColor = new Color(0.02f, 0.03f, 0.05f, 0.88f);
     static readonly Color CardColor = new Color(0.09f, 0.11f, 0.16f, 1f);
@@ -52,9 +51,6 @@ public class SettingsPanel : MonoBehaviour
     RectTransform resumeRect;
     RectTransform restartRect;
     RectTransform menuRect;
-
-    Text hintLabel;
-    RectTransform hintRect;
 
     bool built;
     bool isOpen;
@@ -183,7 +179,6 @@ public class SettingsPanel : MonoBehaviour
         Place(volumeCaption.rectTransform, half - VolumeFromTop);
         Place(sliderRect, half - VolumeFromTop);
         Place(volumeValueRect, half - VolumeFromTop);
-        Place(hintRect, -half + HintFromBottom);
 
         if (inLevel)
         {
@@ -296,11 +291,6 @@ public class SettingsPanel : MonoBehaviour
             new Vector2(0.5f, 0.5f), new Vector2(ButtonWidth, ButtonHeight), QuitColor, 32, Color.white);
         menuRect = (RectTransform)menuButton.transform;
         menuButton.onClick.AddListener(OnBackToMenu);
-
-        hintLabel = UIFactory.Label(card, "Hint", "按 ESC 关闭", 16,
-            new Color(0.55f, 0.62f, 0.75f, 0.85f), TextAnchor.MiddleCenter,
-            new Vector2(0.5f, 0.5f), new Vector2(600f, 34f), Vector2.zero);
-        hintRect = hintLabel.rectTransform;
 
         volumeSlider.onValueChanged.AddListener(OnVolumeChanged);
         SyncVolumeControls();
