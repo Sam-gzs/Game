@@ -515,18 +515,6 @@ public static class StickmanGameBuilder
     {
         Canvas canvas = UIFactory.CreateCanvas("UICanvas");
 
-        // small message strip for "cannot place the box here"
-        var toast = UIFactory.Box(canvas.transform, "Toast", new Vector2(0.5f, 0.12f), new Vector2(900f, 66f),
-            new Color(0.78f, 0.24f, 0.20f, 0.92f));
-        var toastText = UIFactory.Label(toast.transform, "ToastLabel", "", 28, Color.white, TextAnchor.MiddleCenter,
-            new Vector2(0.5f, 0.5f), new Vector2(880f, 60f), Vector2.zero);
-        var toastGroup = toast.gameObject.AddComponent<CanvasGroup>();
-        toastGroup.alpha = 0f;
-        toastGroup.blocksRaycasts = false;
-        var toastUi = canvas.gameObject.AddComponent<ToastUI>();
-        toastUi.label = toastText;
-        toastUi.group = toastGroup;
-
         var overlay = UIFactory.FullScreen(canvas.transform, "CompletePanel", new Color(0f, 0f, 0f, 0.72f));
         var card = UIFactory.Box(overlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(900f, 520f), Card);
 

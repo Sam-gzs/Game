@@ -572,7 +572,6 @@ public class BoxProjectile : MonoBehaviour
         // Lose the momentum the turn gave us, without destroying anything.
         speedLevel = 0;
         UpdateSpeedVisual();
-        ToastUI.Show("NOT ENOUGH MOMENTUM  -  the ball drops");
         StopHere();
         return true;
     }

@@ -172,7 +172,6 @@ public class PlayerController : MonoBehaviour
                 if (!Grounded)
                 {
                     AudioManager.Play(Sfx.RefuseAirThrow);
-                    ToastUI.Show("LAND FIRST  -  no throwing in the air");
                 }
                 else
                 {
@@ -273,22 +272,16 @@ public class PlayerController : MonoBehaviour
     {
         if (boxCapacity >= MaxBoxCapacity) return;
         boxCapacity++;
-        ToastUI.Show("EXTRA BOX  -  you can throw " + boxCapacity);
     }
 
     /// <summary>Press E: only a box that has come to rest can be taken back / destroyed.</summary>
     public void RecallBox()
     {
         var box = BoxProjectile.LatestIdle;
-        if (box == null)
-        {
-            if (BoxProjectile.Count > 0) ToastUI.Show("BOX IS STILL MOVING  -  wait until it stops");
-            return;
-        }
+        if (box == null) return;
 
         Destroy(box.gameObject);
         AudioManager.Play(Sfx.Recall);
-        ToastUI.Show("BOX RECALLED");
     }
 
     /// <summary>Press R: reload the level (irreversible blocks/stone make this necessary).</summary>
@@ -329,7 +322,6 @@ public class PlayerController : MonoBehaviour
     {
         if (!Grounded)
         {
-            ToastUI.Show("LAND FIRST  -  no throwing in the air");
             return null;
         }
 
@@ -353,9 +345,6 @@ public class PlayerController : MonoBehaviour
         if (!BoxProjectile.CanSpawnAt(targetCell))
         {
             AudioManager.Play(Sfx.RefuseBlocked);
-            ToastUI.Show(BoxProjectile.IsBoxAt(targetCell)
-                ? "NO ROOM HERE  -  a ball is already there"
-                : "NO ROOM HERE  -  the ball would get stuck");
             return null;
         }
 
