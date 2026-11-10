@@ -374,6 +374,16 @@ public class GridTile : MonoBehaviour
         return t == TileType.Solid || t == TileType.Stone || t == TileType.Wood || t == TileType.Dirt;
     }
 
+    /// <summary>
+    /// A falling block only acts like a brick once it has landed: while it is still dropping it
+    /// must not glue the slime, but a settled one is as solid as stone.
+    /// </summary>
+    static bool AnchorsSticky(GridTile t)
+    {
+        if (IsNormalBrick(t.type)) return true;
+        return t.type == TileType.Falling && !t.IsFalling;
+    }
+
     /// <summary>Sticky touches a normal brick on any 4-neighbour side: it is glued and cannot be pushed.</summary>
     public bool IsStickyAnchored()
     {
@@ -391,7 +401,7 @@ public class GridTile : MonoBehaviour
             {
                 var t = tiles[i];
                 if (t == null || t == this || !t.OccupiesCell(c)) continue;
-                if (IsNormalBrick(t.type)) return true;
+                if (AnchorsSticky(t)) return true;
             }
         }
         return false;
@@ -428,7 +438,8 @@ public class GridTile : MonoBehaviour
             var t = tiles[i];
             if (t == null || t == this || !t.OccupiesCell(belowCell)) continue;
 
-            if (t.type == TileType.Falling) continue; // a moving falling block is not a support
+            // A block still dropping is not a floor; once it has landed it is a normal brick.
+            if (t.type == TileType.Falling && t.IsFalling) continue;
             if (t.type == TileType.Gate && t.GateOpen) continue;
             if (IsStickyPassable(t.type))
             {
@@ -443,6 +454,10 @@ public class GridTile : MonoBehaviour
         return BoxProjectile.IsBoxAt(belowCell);
     }
 
+    /// <summary>
+    /// Neighbouring block that is currently dropping. A landed falling block is a normal brick
+    /// now, so it must not be returned here or it would keep dragging the slime around.
+    /// </summary>
     GridTile FindAdjacentFalling()
     {
         var dirs = new[]
@@ -457,7 +472,7 @@ public class GridTile : MonoBehaviour
             {
                 var t = tiles[i];
                 if (t == null || t == this || !t.OccupiesCell(c)) continue;
-                if (t.type == TileType.Falling) return t;
+                if (t.type == TileType.Falling && t.IsFalling) return t;
             }
         }
         return null;
@@ -517,8 +532,10 @@ public class GridTile : MonoBehaviour
         if (supported) return; // a block below keeps even an anchored sticky in place; block falls alone
 
         // No block below: a falling block is the only thing that can pull a stuck sticky off.
+        // Once that block lands it becomes a normal brick, so the drag ends with it.
         var adjacentFalling = FindAdjacentFalling();
         if (adjacentFalling != null) followFalling = adjacentFalling;
+        else if (followFalling != null && !followFalling.IsFalling) followFalling = null;
 
         if (followFalling == null || (!followFalling.IsFalling && followFalling.cell != cell + Vector2Int.up))
             return; // floating: free sticky does not fall by itself

@@ -370,7 +370,10 @@ public class BoxProjectile : MonoBehaviour
                 if (speedLevel >= required)
                 {
                     PlayBreak(tile.type);
-                    BrickBreakFx.Play(tile.type, tile.transform.position);
+                    // The shards must be gone by the time the cat has flown through this cell,
+                    // so the shatter runs for exactly one step of the current speed.
+                    BrickBreakFx.Play(tile.type, tile.transform.position,
+                        1f / Mathf.Max(0.01f, moving ? moveSpeed : fallSpeed));
                     Destroy(tile.gameObject);
                     speedLevel -= 1;
                     fromPos = transform.position;
@@ -603,11 +606,12 @@ public class BoxProjectile : MonoBehaviour
             Vector2Int dir = newCell - old;
             Vector2Int stickyCell = followStickyAhead ? newCell + dir : old;
 
-            // A carried sticky follows one cell per step. If the ball turned around, the target
-            // sits on the far side of the ball - leave the sticky where it is this step instead
-            // of teleporting it through the ball. The carry is kept, it just does not move.
+            // A carried sticky follows one cell per step, diagonal steps included: when the ball
+            // travels along a diagonal the slime travels the same diagonal, so a diagonal offset
+            // of one is the normal follow distance and not a teleport. Only a target that is
+            // genuinely far away (the ball turned around) leaves the slime in place this step.
             Vector2Int from = followSticky.cell;
-            int step = Mathf.Abs(stickyCell.x - from.x) + Mathf.Abs(stickyCell.y - from.y);
+            int step = Mathf.Max(Mathf.Abs(stickyCell.x - from.x), Mathf.Abs(stickyCell.y - from.y));
 
             if (step <= 1)
             {
@@ -726,18 +730,39 @@ public class BoxProjectile : MonoBehaviour
         {
             var t = tiles[i];
             if (t == null || !t.OccupiesCell(cell)) continue;
-
-            if (t.type == TileType.Switch || t.type == TileType.Plate ||
-                t.type == TileType.Jelly || t.type == TileType.BallSwitch ||
-                t.type == TileType.TriggerPlayer || t.type == TileType.TriggerBall ||
-                t.type == TileType.TextAnchor || t.type == TileType.CatTrigger ||
-                t.type == TileType.CatExit) continue; // pass through
-            if (t.type == TileType.Gate && t.GateOpen) continue;                // open gate: hole
+            if (IsPassThrough(t)) continue;
 
             return false;
         }
 
         return FindBox(cell) == null;
+    }
+
+    /// <summary>
+    /// Tiles with no body: a ball or a slime passes through them, so they must never decide how
+    /// a collision is resolved. Several of them can share a cell with the real obstacle (a slime
+    /// sitting on a switch, a box parked on a plate), which is why the lookup below prefers the
+    /// blocking tile instead of whatever the scene order happens to return first.
+    /// </summary>
+    static bool IsPassThrough(GridTile t)
+    {
+        switch (t.type)
+        {
+            case TileType.Switch:
+            case TileType.Plate:
+            case TileType.Jelly:
+            case TileType.BallSwitch:
+            case TileType.TriggerPlayer:
+            case TileType.TriggerBall:
+            case TileType.TextAnchor:
+            case TileType.CatTrigger:
+            case TileType.CatExit:
+                return true;
+            case TileType.Gate:
+                return t.GateOpen;
+            default:
+                return false;
+        }
     }
 
     BoxProjectile FindBox(Vector2Int cell)
@@ -824,13 +849,24 @@ public class BoxProjectile : MonoBehaviour
         UpdateSpeedVisual();
     }
 
+    /// <summary>
+    /// The tile that actually blocks this cell. Pass-through tiles (switch / plate / jelly /
+    /// trigger / open gate) may share the cell with the real obstacle, so they are only a
+    /// fallback: returning one of them here used to make a carried slime that had been pushed
+    /// onto a ball switch look "stuck in the switch", because the ball stopped on the switch
+    /// instead of pushing the slime.
+    /// </summary>
     static GridTile FindTile(Vector2Int cell)
     {
         var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        GridTile passThrough = null;
         for (int i = 0; i < tiles.Length; i++)
         {
-            if (tiles[i].cell == cell) return tiles[i];
+            var t = tiles[i];
+            if (t == null || t.cell != cell) continue;
+            if (!IsPassThrough(t)) return t;
+            if (passThrough == null) passThrough = t;
         }
-        return null;
+        return passThrough;
     }
 }

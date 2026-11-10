@@ -29,8 +29,15 @@ public class BrickBreakFx : MonoBehaviour
     float age;
     float frameRate;
     int firstFrame;
+    float holdTime;
+    float fadeTime;
 
-    public static void Play(TileType type, Vector3 position)
+    /// <summary>
+    /// Spawn the shatter animation. When <paramref name="duration"/> is greater than zero the
+    /// whole animation (last frame plus fade) finishes exactly after that many seconds, which is
+    /// how the effect is kept in sync with the ball flying through the cell it just broke.
+    /// </summary>
+    public static void Play(TileType type, Vector3 position, float duration = 0f)
     {
         if (!Application.isPlaying) return;
 
@@ -59,9 +66,26 @@ public class BrickBreakFx : MonoBehaviour
         var fx = go.AddComponent<BrickBreakFx>();
         fx.frames = frames;
         fx.sr = renderer;
-        fx.frameRate = fps;
         fx.firstFrame = first;
         renderer.sprite = frames[Mathf.Min(first, frames.Length - 1)];
+
+        int shown = Mathf.Max(1, frames.Length - first);
+        if (duration > 0f)
+        {
+            // Fit every remaining frame plus the fade into the given time.
+            float fade = shown > 1 ? Mathf.Min(0.25f * duration, FadeTime) : duration;
+            fx.holdTime = 0f;
+            fx.fadeTime = fade;
+            fx.frameRate = shown > 1
+                ? (shown - 1) / Mathf.Max(0.0001f, duration - fade)
+                : 1f;
+        }
+        else
+        {
+            fx.holdTime = HoldTime;
+            fx.fadeTime = FadeTime;
+            fx.frameRate = fps;
+        }
     }
 
     void Update()
@@ -83,9 +107,9 @@ public class BrickBreakFx : MonoBehaviour
 
             // the last frame starts after (length - 1 - firstFrame) steps, then hold, then fade
             float sinceLast = age - (frames.Length - 1 - firstFrame) * step;
-            if (sinceLast > HoldTime)
+            if (sinceLast > holdTime)
             {
-                float a = 1f - Mathf.Clamp01((sinceLast - HoldTime) / Mathf.Max(0.01f, FadeTime));
+                float a = 1f - Mathf.Clamp01((sinceLast - holdTime) / Mathf.Max(0.01f, fadeTime));
                 var c = sr.color;
                 c.a = a;
                 sr.color = c;
