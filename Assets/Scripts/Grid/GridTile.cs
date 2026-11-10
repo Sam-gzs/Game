@@ -25,7 +25,29 @@ public enum TileType
     BallSwitch,      // channel switch that is ON only while a ball is inside its cell
     TriggerPlayer,   // invisible in play; fires a tutorial text when the player enters
     TriggerBall,     // invisible in play; fires a tutorial text when a ball is in the cell
-    TextAnchor       // invisible in play; marker that owns/displays the tutorial text
+    TextAnchor,      // invisible in play; marker that owns/displays the tutorial text
+    CatTrigger,      // colourless trigger: touching it lets the cat in
+    CatExit          // colourless marker: where the cat waits before it is let in
+}
+
+/// <summary>Who is allowed to set a CatTrigger off.</summary>
+public enum CatTriggerActor
+{
+    Player,
+    Cat,
+    Both
+}
+
+/// <summary>
+/// Which side of a spring (TileType.Bounce) faces the ball. The spring only gives along this
+/// axis: a ball arriving against the face is thrown straight back, anything else hits a wall.
+/// </summary>
+public enum SpringFacing
+{
+    Up,
+    Down,
+    Left,
+    Right
 }
 
 /// <summary>
@@ -43,11 +65,31 @@ public class GridTile : MonoBehaviour
     [Tooltip("Switches, gates, mirrors and plates are bound by this number: same channel = same circuit.")]
     public int channel = 1;
 
-    [Tooltip("Gate: invert its state (open while the channel is off).")]
+    [Tooltip("Gate: open while the channel is off (inverting the gate itself).\n" +
+             "Switch / BallSwitch: invert what the switch means - unlit (red/brown) counts as " +
+             "pressed, so its gate stays open and pressing it closes the gate.")]
     public bool invert;
 
     [Tooltip("Mirror: true = '\\', false = '/'. A channel signal sets it to '/' when on.")]
     public bool mirrorDown = true;
+
+    [Header("Spring (TileType.Bounce)")]
+    [Tooltip("Which side of the spring faces the ball. The spring only gives along this axis: " +
+             "a ball arriving against the face is thrown straight back, every other side is solid.")]
+    public SpringFacing springFacing = SpringFacing.Right;
+
+    /// <summary>Seconds left of the squashed spring frame after a ball bounced off it.</summary>
+    float springHitTimer;
+    const float SpringHitTime = 0.10f;
+
+    /// <summary>Temporary: log why a sticky starts falling / glues / is released. Off by default.</summary>
+    public const bool TraceSticky = false;
+
+    [Header("Cat trigger (TileType.CatTrigger)")]
+    [Tooltip("Who can set this trigger off. The cat is allowed too, for levels where it has to reach one.")]
+    public CatTriggerActor catTriggerActor = CatTriggerActor.Player;
+
+    bool catTriggered;
 
     [Header("Tutorial text (used by TextAnchor)")]
     [TextArea] public string tutorialText = "TEXT";
@@ -66,7 +108,6 @@ public class GridTile : MonoBehaviour
     public bool GateOpen { get; private set; }
     public bool PlatePressed { get; private set; }
     float nextSwitchTime;
-    bool playerOnPlate;
 
     public static readonly Color SolidColor = new Color(0.20f, 0.23f, 0.31f, 1f);
     public static readonly Color SolidEdge = new Color(0.36f, 0.43f, 0.58f, 1f);
@@ -143,12 +184,25 @@ public class GridTile : MonoBehaviour
         if (!Application.isPlaying) return;
 
         if (type == TileType.Falling) FallTick();
-        else if (type == TileType.Plate) PlateTick();
         else if (type == TileType.Sticky) StickyTick();
-        else if (type == TileType.BallSwitch) BallSwitchTick();
         else if (type == TileType.TriggerBall) TriggerBallTick();
+        else if (type == TileType.Bounce) SpringTick();
+        else if (type == TileType.CatTrigger) CatTriggerTick();
         else if (type == TileType.TextAnchor && tutorialTimer > 0f)
             tutorialTimer = Mathf.Max(0f, tutorialTimer - Time.deltaTime);
+    }
+
+    /// <summary>
+    /// Sensors are settled only after every moving thing has finished its step, so a switch can
+    /// never bend the movement that is being resolved in the same frame: during movement the
+    /// switch simply does not exist, and once everything has landed the channel is evaluated.
+    /// </summary>
+    void LateUpdate()
+    {
+        if (!Application.isPlaying) return;
+
+        if (type == TileType.BallSwitch) BallSwitchTick();
+        else if (type == TileType.Plate) PlateTick();
     }
 
     /// <summary>Fires once when a ball's logical cell enters this tile.</summary>
@@ -174,6 +228,42 @@ public class GridTile : MonoBehaviour
     public void ShowTutorial()
     {
         tutorialTimer = Mathf.Max(0.1f, tutorialDuration);
+    }
+
+    // ---- cat trigger / cat exit ------------------------------------------
+
+    /// <summary>
+    /// The cat has no collider, so "the cat walked over it" is a cell comparison instead of a
+    /// physics callback. The player side is handled by the trigger collider in OnTriggerEnter2D.
+    /// </summary>
+    void CatTriggerTick()
+    {
+        if (catTriggered) return;
+        if (catTriggerActor != CatTriggerActor.Cat && catTriggerActor != CatTriggerActor.Both) return;
+
+        var cat = CatCompanion.Current;
+        if (cat == null || cat.IsDormant) return;
+        if (GridUtil.WorldToCell(cat.transform.position) != cell) return;
+
+        TriggerCat();
+    }
+
+    void TriggerCat()
+    {
+        if (catTriggered) return;
+        catTriggered = true;
+        CatCompanion.Summon();
+    }
+
+    /// <summary>The level's "the cat is waiting here" marker, if it has one.</summary>
+    public static GridTile FindCatExit()
+    {
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            if (tiles[i] != null && tiles[i].type == TileType.CatExit) return tiles[i];
+        }
+        return null;
     }
 
     /// <summary>Falling blocks drop cell by cell until something is under them.</summary>
@@ -210,7 +300,8 @@ public class GridTile : MonoBehaviour
             if (t.type == TileType.Switch || t.type == TileType.Plate ||
                 t.type == TileType.Jelly || t.type == TileType.BallSwitch ||
                 t.type == TileType.TriggerPlayer || t.type == TileType.TriggerBall ||
-                t.type == TileType.TextAnchor)
+                t.type == TileType.TextAnchor || t.type == TileType.CatTrigger ||
+                t.type == TileType.CatExit)
             {
                 if (t.type == TileType.Switch) button = t;
                 continue;
@@ -284,18 +375,32 @@ public class GridTile : MonoBehaviour
         return false;
     }
 
-    static bool IsStickyPassable(TileType t)
+    /// <summary>Buttons / plates / ball switches: no body at all, anything may pass through.</summary>
+    static bool IsButtonLike(TileType t)
     {
-        return t == TileType.Jelly || t == TileType.Switch || t == TileType.Plate ||
-               t == TileType.BallSwitch || t == TileType.TriggerPlayer ||
-               t == TileType.TriggerBall || t == TileType.TextAnchor;
+        return t == TileType.Switch || t == TileType.Plate || t == TileType.BallSwitch;
     }
 
-    /// <summary>Is there a solid block directly below the sticky? Jelly/buttons/plates/open gates do not count.</summary>
+    static bool IsStickyPassable(TileType t)
+    {
+        return t == TileType.Jelly || IsButtonLike(t) ||
+               t == TileType.TriggerPlayer || t == TileType.TriggerBall ||
+               t == TileType.TextAnchor || t == TileType.CatTrigger ||
+               t == TileType.CatExit;
+    }
+
+    /// <summary>
+    /// Is there a solid block directly below the sticky? Jelly/buttons/plates/open gates do not count.
+    ///
+    /// A switch cell is empty space for slime, full stop: the tile has no body, and a ball that
+    /// happens to be parked in that cell is only there to hold the switch - it must not quietly
+    /// become a floor either, otherwise the switch bends the slime's fall after all.
+    /// </summary>
     public bool HasBlockBelow()
     {
         Vector2Int belowCell = cell + Vector2Int.down;
         var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        bool buttonCell = false;
         for (int i = 0; i < tiles.Length; i++)
         {
             var t = tiles[i];
@@ -303,9 +408,15 @@ public class GridTile : MonoBehaviour
 
             if (t.type == TileType.Falling) continue; // a moving falling block is not a support
             if (t.type == TileType.Gate && t.GateOpen) continue;
-            if (IsStickyPassable(t.type)) continue;
+            if (IsStickyPassable(t.type))
+            {
+                if (IsButtonLike(t.type)) buttonCell = true;
+                continue;
+            }
             return true;
         }
+
+        if (buttonCell) return false;
 
         return BoxProjectile.IsBoxAt(belowCell);
     }
@@ -348,7 +459,9 @@ public class GridTile : MonoBehaviour
         if (followBall != null) return;
 
         // Moving into a cell that touches a normal brick: it glues there, mid-motion.
-        bool anchoredNow = IsStickyAnchored() && (followFalling != null || HasBlockBelow());
+        // A switch cell never glues: the slime passes over it like it was empty.
+        bool anchoredNow = !IsSwitchCellAt(cell) && IsStickyAnchored() &&
+                           (followFalling != null || HasBlockBelow());
         if (anchoredNow)
         {
             if (!gluedToWall)
@@ -390,11 +503,29 @@ public class GridTile : MonoBehaviour
         if (followFalling.cell == cell + Vector2Int.down) return;       // let it move first
         if (!CanStickyFall()) return;
 
+        if (TraceSticky)
+            Debug.Log($"[Sticky] FALL {cell} -> {cell + Vector2Int.down} | dragFrom={followFalling.cell} " +
+                      $"dragIsFalling={followFalling.IsFalling} | followBall={(followBall != null ? "yes" : "no")} " +
+                      $"anchored={IsStickyAnchored()} below={HasBlockBelow()}");
+
         stickyFalling = true;
         stickyFallT = 0f;
         stickyFrom = transform.position;
         cell += Vector2Int.down;
         stickyTo = GridUtil.CellCenter(cell);
+    }
+
+    /// <summary>True when that cell currently holds a button / plate / switch - something with no body.</summary>
+    static bool IsSwitchCellAt(Vector2Int c)
+    {
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            var t = tiles[i];
+            if (t == null || !t.OccupiesCell(c)) continue;
+            if (IsButtonLike(t.type)) return true;
+        }
+        return false;
     }
 
     /// <summary>The carrying ball moves one cell; the sticky follows into the cell it just left.</summary>
@@ -405,9 +536,15 @@ public class GridTile : MonoBehaviour
         cell = newCell;
         transform.position = new Vector3(newCell.x + 0.5f, newCell.y + 0.5f, 0f);
 
-        // While being carried, touching a normal brick glues it mid-motion.
+        // While being carried, touching a normal brick glues it mid-motion - but a switch is not
+        // a brick: passing over one must never stop the slime, it just keeps moving as it would
+        // with the switch taken out of the level.
+        if (IsSwitchCellAt(newCell)) return;
+
         if (IsStickyAnchored())
         {
+            if (TraceSticky)
+                Debug.Log($"[Sticky] DETACH at {newCell} (touches a brick) followBall={(followBall != null ? "yes" : "no")}");
             followFalling = null;
             if (followBall != null)
             {
@@ -510,6 +647,11 @@ public class GridTile : MonoBehaviour
     /// <summary>Small white pips at the bottom of a block show the required ball speed.</summary>
     void SetThresholdPips(int count)
     {
+        // OnValidate runs on every import / domain reload, on scene objects and on the prefab
+        // asset. Creating children there dirties scenes and throws as soon as a serialized
+        // reference has gone stale - so the pips are generated at runtime only.
+        if (!Application.isPlaying) return;
+
         if (pipsRoot == null)
         {
             var existing = transform.Find("ThresholdPips");
@@ -521,7 +663,17 @@ public class GridTile : MonoBehaviour
             go.transform.SetParent(transform, false);
             pipsRoot = go.transform;
         }
-        if (pips == null || pips.Length != 3)
+
+        bool stale = pips == null || pips.Length != 3;
+        if (!stale)
+        {
+            for (int i = 0; i < pips.Length; i++)
+            {
+                if (pips[i] == null) { stale = true; break; }
+            }
+        }
+
+        if (stale)
         {
             var list = new System.Collections.Generic.List<SpriteRenderer>();
             for (int i = 0; i < pipsRoot.childCount; i++)
@@ -560,7 +712,7 @@ public class GridTile : MonoBehaviour
 
     void PlateTick()
     {
-        bool pressed = playerOnPlate || BoxProjectile.IsBoxAt(cell) || HasFallingAt(cell);
+        bool pressed = BoxProjectile.IsBoxAt(cell) || HasFallingAt(cell);
         if (pressed == PlatePressed) return;
 
         PlatePressed = pressed;
@@ -669,7 +821,7 @@ public class GridTile : MonoBehaviour
         if (baseSprite == null && type != TileType.Door) baseSprite = sr.sprite;
         RemoveDoorVisual();
 
-        if (type != TileType.Door && baseSprite != null) sr.sprite = baseSprite;
+        if (type != TileType.Door && baseSprite != null && sr.sprite != baseSprite) sr.sprite = baseSprite;
 
         switch (type)
         {
@@ -680,21 +832,23 @@ public class GridTile : MonoBehaviour
                 col.isTrigger = false;
                 break;
             case TileType.Stone:
-                sr.color = StoneColor;
+                sr.sprite = BrickArt.Still(TileType.Stone);
+                sr.color = Color.white;   // the artwork is already coloured
                 sr.enabled = true;
                 col.enabled = true;
                 col.isTrigger = false;
                 break;
             case TileType.Wood:
-                sr.color = WoodColor;
+                sr.sprite = BrickArt.Still(TileType.Wood);
+                sr.color = Color.white;
                 sr.enabled = true;
                 col.enabled = true;
                 col.isTrigger = false;
                 break;
             case TileType.Refract:
                 sr.enabled = true;
-                sr.color = RefractColor;
-                sr.sprite = ResourceSprite("Refract90");
+                sr.color = Color.white;
+                sr.sprite = ResourceSprite("BlockRefract90");
                 col.enabled = true;
                 col.isTrigger = false;
                 break;
@@ -720,13 +874,15 @@ public class GridTile : MonoBehaviour
                 col.isTrigger = false;
                 break;
             case TileType.Bounce:
-                sr.color = BounceColor;
+                ApplySpringSprite(false);
+                sr.color = Color.white;
                 sr.enabled = true;
                 col.enabled = true;
                 col.isTrigger = false;
                 break;
             case TileType.Dirt:
-                sr.color = DirtColor;
+                sr.sprite = BrickArt.Still(TileType.Dirt);
+                sr.color = Color.white;
                 sr.enabled = true;
                 col.enabled = true;
                 col.isTrigger = false;
@@ -805,7 +961,6 @@ public class GridTile : MonoBehaviour
                 col.size = Vector2.one;
                 col.offset = Vector2.zero;
                 PlatePressed = false;
-                playerOnPlate = false;
                 RefreshPlateVisual();
                 break;
             case TileType.Pickup:
@@ -839,12 +994,28 @@ public class GridTile : MonoBehaviour
                 sr.color = new Color(1f, 0.90f, 0.30f, 1f);
                 col.enabled = false;
                 break;
+            case TileType.CatTrigger:
+            case TileType.CatExit:
+                // colourless in play: a bare marker in the editor and nothing at all in the game.
+                // The trigger keeps a trigger collider so the player can run into it; the exit
+                // point has no collider so nobody bumps into it.
+                sr.enabled = !Application.isPlaying;
+                sr.sprite = baseSprite != null ? baseSprite : ResourceSprite("SwitchOff");
+                sr.color = type == TileType.CatTrigger
+                    ? new Color(1f, 0.62f, 0.15f, 1f)    // where the cat is called in
+                    : new Color(0.35f, 1f, 0.55f, 1f);   // where the cat is waiting
+                col.enabled = type == TileType.CatTrigger;
+                col.isTrigger = true;
+                break;
         }
 
         int speedPips = type == TileType.Stone ? 3 : type == TileType.Wood ? 2 : type == TileType.Dirt ? 1 : 0;
         SetThresholdPips(speedPips);
 
-        sr.sortingOrder = 1;
+        // Everything static shares one layer, so whichever instance happened to be created last
+        // drew on top. The slime has to be the one on top: passing over a switch/plate must show
+        // the slime covering it for a moment, never the switch swallowing the slime.
+        sr.sortingOrder = type == TileType.Sticky ? 2 : 1;
     }
 
     static Sprite s_door;
@@ -865,11 +1036,88 @@ public class GridTile : MonoBehaviour
     {
         if (t == TileType.RefractorDown)
         {
-            if (s_refractDown == null) s_refractDown = Resources.Load<Sprite>("RefractDown");
+            if (s_refractDown == null) s_refractDown = Resources.Load<Sprite>("BlockRefractDown");
             return s_refractDown;
         }
-        if (s_refractUp == null) s_refractUp = Resources.Load<Sprite>("RefractUp");
+        if (s_refractUp == null) s_refractUp = Resources.Load<Sprite>("BlockRefractUp");
         return s_refractUp;
+    }
+
+    // ---- spring (the bounce block) --------------------------------------
+
+    static Sprite s_springUp, s_springUpHit, s_springSide, s_springSideHit;
+
+    /// <summary>Direction the spring's face points at.</summary>
+    public Vector2Int SpringFace
+    {
+        get
+        {
+            switch (springFacing)
+            {
+                case SpringFacing.Up: return Vector2Int.up;
+                case SpringFacing.Down: return Vector2Int.down;
+                case SpringFacing.Left: return Vector2Int.left;
+                default: return Vector2Int.right;
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when a ball travelling along <paramref name="dir"/> runs into the spring's face.
+    /// A real spring only gives along its own axis - every other side is just a wall.
+    /// </summary>
+    public bool SpringCatches(Vector2Int dir)
+    {
+        return type == TileType.Bounce && dir == -SpringFace;
+    }
+
+    /// <summary>Spring art: vertical or horizontal, resting or compressed.</summary>
+    static Sprite SpringSprite(bool horizontal, bool squashed)
+    {
+        if (horizontal)
+        {
+            if (s_springSide == null) s_springSide = Resources.Load<Sprite>("Spring_Side");
+            if (!squashed) return s_springSide;
+            if (s_springSideHit == null) s_springSideHit = Resources.Load<Sprite>("Spring_Side_Hit");
+            return s_springSideHit != null ? s_springSideHit : s_springSide;
+        }
+
+        if (s_springUp == null) s_springUp = Resources.Load<Sprite>("Spring");
+        if (!squashed) return s_springUp;
+        if (s_springUpHit == null) s_springUpHit = Resources.Load<Sprite>("Spring_Hit");
+        return s_springUpHit != null ? s_springUpHit : s_springUp;
+    }
+
+    /// <summary>Picks the sprite and mirroring that match the spring's facing.</summary>
+    void ApplySpringSprite(bool squashed)
+    {
+        if (sr == null) return;
+
+        bool horizontal = springFacing == SpringFacing.Left || springFacing == SpringFacing.Right;
+        sr.sprite = SpringSprite(horizontal, squashed);
+
+        // The art is authored facing up / right; Left and Down are the mirrored copies.
+        sr.flipX = springFacing == SpringFacing.Left;
+        sr.flipY = springFacing == SpringFacing.Down;
+    }
+
+    /// <summary>A ball bounced off this spring: show the squashed frame for a moment.</summary>
+    public void SpringHit()
+    {
+        if (type != TileType.Bounce) return;
+        springHitTimer = SpringHitTime;
+        ApplySpringSprite(true);
+    }
+
+    void SpringTick()
+    {
+        if (springHitTimer <= 0f) return;
+
+        springHitTimer -= Time.deltaTime;
+        if (springHitTimer > 0f) return;
+
+        springHitTimer = 0f;
+        ApplySpringSprite(false);
     }
 
     /// <summary>
@@ -913,13 +1161,9 @@ public class GridTile : MonoBehaviour
         if (changed && Application.isPlaying) AudioManager.Play(open ? Sfx.GateOpen : Sfx.GateClose);
     }
 
-    void OnCollisionEnter2D(Collision2D collision)
-    {
-        if (type != TileType.Switch) return;
-        if (collision.collider.GetComponent<PlayerController>() == null) return;
-
-        PressButton();
-    }
+    // The player deliberately cannot operate switches: buttons, ball switches and plates are
+    // all driven by the thrown ball and by falling blocks only. There is no player-side
+    // OnCollisionEnter2D / OnTriggerEnter2D path into PressButton() or PlateTick() any more.
 
 #if UNITY_EDITOR
     void OnDrawGizmos()
@@ -990,6 +1234,12 @@ public class GridTile : MonoBehaviour
             return;
         }
 
+        if (type == TileType.CatTrigger)
+        {
+            if (catTriggerActor != CatTriggerActor.Cat) TriggerCat();
+            return;
+        }
+
         // jelly: passable, but the player is slowed while inside it
         if (type == TileType.Jelly)
         {
@@ -997,16 +1247,9 @@ public class GridTile : MonoBehaviour
             return;
         }
 
-        // pressure plate: pressed while the player stands in its cell
-        if (type == TileType.Plate)
-        {
-            if (!playerOnPlate)
-            {
-                playerOnPlate = true;
-                PlateTick();
-            }
-            return;
-        }
+        // pressure plate: the player standing on it does nothing - only a ball or a falling
+        // block presses it (see PlateTick). Kept as an early out so nothing below runs.
+        if (type == TileType.Plate) return;
 
         // extra-box pickup
         if (type == TileType.Pickup)
@@ -1034,12 +1277,6 @@ public class GridTile : MonoBehaviour
         {
             player.ExitJelly();
             return;
-        }
-
-        if (type == TileType.Plate && playerOnPlate)
-        {
-            playerOnPlate = false;
-            PlateTick();
         }
     }
 }

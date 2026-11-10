@@ -159,6 +159,8 @@ MonoBehaviour:
   channel: 1
   invert: 0
   mirrorDown: 1
+  springFacing: 3
+  catTriggerActor: 0
   tutorialText: TEXT
   tutorialFontSize: 28
   tutorialFont: {fileID: 0}

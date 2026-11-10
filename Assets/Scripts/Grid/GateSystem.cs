@@ -14,7 +14,10 @@ public static class GateSystem
         SetChannel(channel, IsButtonChannelOpen(channel));
     }
 
-    /// <summary>Open while the number of pressed switches on the channel is odd.</summary>
+    /// <summary>
+    /// Open while the number of pressed switches on the channel is odd. A switch with
+    /// <c>invert</c> set counts the other way round: unlit counts as pressed.
+    /// </summary>
     static bool IsButtonChannelOpen(int channel)
     {
         int pressed = 0;
@@ -25,7 +28,7 @@ public static class GateSystem
             if (t == null) continue;
             if (t.type != TileType.Switch && t.type != TileType.BallSwitch) continue;
             if (t.channel != channel) continue;
-            if (t.SwitchOn) pressed++;
+            if (t.SwitchOn ^ t.invert) pressed++;
         }
 
         return (pressed & 1) == 1;
@@ -38,6 +41,27 @@ public static class GateSystem
     public static void RefreshButtons(int channel)
     {
         SetChannel(channel, IsButtonChannelOpen(channel));
+    }
+
+    /// <summary>
+    /// Level start: an inverted switch already counts as pressed on the first frame, so its
+    /// channel has to be evaluated before play. Only channels that actually contain such a
+    /// switch are touched, so every other level keeps the gate state its scene was saved with.
+    /// </summary>
+    public static void ApplyStartStates()
+    {
+        var tiles = Object.FindObjectsByType<GridTile>(FindObjectsSortMode.None);
+        var channels = new System.Collections.Generic.HashSet<int>();
+
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            var t = tiles[i];
+            if (t == null || !t.invert) continue;
+            if (t.type != TileType.Switch && t.type != TileType.BallSwitch) continue;
+            channels.Add(t.channel);
+        }
+
+        foreach (int ch in channels) RefreshButtons(ch);
     }
 
     /// <summary>Plate channels: open while any plate on the channel is pressed.</summary>

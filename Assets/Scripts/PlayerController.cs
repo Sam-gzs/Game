@@ -26,12 +26,6 @@ public class PlayerController : MonoBehaviour
     public int maxCharge = 3;
     public float chargeStep = 0.22f;
 
-    [Header("Aim")]
-    // edge length of one dash block, in cells (0.2 cell = 0.05 corner radius at 25%)
-    public float dashBlockSize = 0.2f;
-    // opacity of the aim dashes
-    [Range(0.1f, 1f)] public float dashAlpha = 0.9f;
-
     [Header("Refs")]
     public Transform visual;
     public LayerMask groundMask = ~0;
@@ -47,9 +41,9 @@ public class PlayerController : MonoBehaviour
     bool charging;
     int jellyContacts;
     public float jellySlow = 0.35f;
-    Transform dashRoot;              // container for the pooled aim blocks
-    SpriteRenderer[] dashes;         // one block per cell the ball would pass through
+    LineRenderer aimLine;
     bool wasGrounded = true;   // spawn already counts as grounded: no landing thud on level start
+    CatCompanion cat;
 
     public bool Grounded { get; private set; }
     public float SpeedX => rb != null ? rb.linearVelocity.x : 0f;
@@ -72,11 +66,15 @@ public class PlayerController : MonoBehaviour
         if (maxCharge < 1) maxCharge = 3;
         if (chargeStep <= 0.01f) chargeStep = 0.22f;
         if (jellySlow <= 0.01f) jellySlow = 0.35f;
-        if (dashBlockSize <= 0.02f) dashBlockSize = 0.2f;
-        CreateAimDashes();
+        CreateAimLine();
+        ChargeBarUI.Ensure();
         rb.freezeRotation = true;
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+
+        // The cat is the ball's skin: it wanders beside the player and becomes the ball on throw.
+        cat = GetComponent<CatCompanion>();
+        if (cat == null) cat = gameObject.AddComponent<CatCompanion>();
 
         // Rounded feet/shoulders: a square box catches on the seam between two floor tiles.
         // NOTE: BoxCollider2D.edgeRadius grows the shape OUTWARDS, so the inner size has to be
@@ -90,6 +88,18 @@ public class PlayerController : MonoBehaviour
             if (col.edgeRadius < radius) col.edgeRadius = radius;
             col.size = new Vector2(bodyWidth - 2f * col.edgeRadius, bodyHeight - 2f * col.edgeRadius);
         }
+    }
+
+    /// <summary>
+    /// A level that contains a CatExit marker holds the cat back: it waits out of sight there
+    /// until a CatTrigger lets it in (Level 1 - it runs out of the gap behind the wall).
+    /// No marker, no waiting: the cat follows from the first frame, as in every other level.
+    /// </summary>
+    void Start()
+    {
+        if (cat == null) return;
+        var exit = GridTile.FindCatExit();
+        if (exit != null) cat.WaitAt(exit.transform.position);
     }
 
     /// <summary>Bottom of the real (rounded) collider shape.</summary>
@@ -109,6 +119,8 @@ public class PlayerController : MonoBehaviour
             charge = 0;
             MoveInput = 0f;
             HideAimPreview();
+            ChargeBarUI.SetCharge(0);
+            ChargeBarUI.SetVisible(false);
             return;
         }
 
@@ -191,6 +203,9 @@ public class PlayerController : MonoBehaviour
 
         if (charging) UpdateAimPreview();
         else HideAimPreview();
+
+        ChargeBarUI.SetVisible(true);
+        ChargeBarUI.SetCharge(charging ? charge : 0);
 
         if (visual != null)
         {
@@ -319,6 +334,9 @@ public class PlayerController : MonoBehaviour
             return null;
         }
 
+        // The cat is still running back / morphing into the ball.
+        if (cat != null && cat.IsBusy) return null;
+
         // capacity is 1 by default; an extra-box pickup raises it
         if (BoxProjectile.Count >= boxCapacity) return null;
 
@@ -343,163 +361,67 @@ public class PlayerController : MonoBehaviour
         }
 
         ThrowCount++;
+        int finalPower = Mathf.Clamp(power, 1, maxCharge);
+
+        // Spawn first, play the sound second: nothing in the audio path may ever swallow a throw.
+        BoxProjectile spawned = null;
+        if (cat != null)
+        {
+            // The cat snaps to the player's hand, curls into a ball, then the ball is spawned.
+            cat.BeginThrow(targetCell, dir, finalPower);
+        }
+        else
+        {
+            spawned = BoxProjectile.Spawn(targetCell, dir, blockSprite, blockMaterial, finalPower);
+        }
+
         AudioManager.Play(Sfx.Throw);
-        return BoxProjectile.Spawn(targetCell, dir, blockSprite, blockMaterial, Mathf.Clamp(power, 1, maxCharge));
+        return spawned;
     }
 
     // ---------------------------------------------------------------------
-    // Aim preview - a dashed trail of pixel blocks, one per cell centre
+    // Aim preview
     // ---------------------------------------------------------------------
 
-    /// <summary>Same sorting layer/order the old solid aim line used.</summary>
-    const int AimSortingOrder = 30;
-
-    /// <summary>Hard cap on dashes: the preview path never walks more than 160 steps.</summary>
-    const int MaxDashBlocks = 192;
-
-    /// <summary>
-    /// Texels along one dash edge. A 0.2 cell block is ~19 px tall at 1080p with the level
-    /// camera (orthographic size 5.6), so 20 texels lands almost exactly 1 texel = 1 pixel.
-    /// </summary>
-    const int DashTexels = 20;
-
-    /// <summary>Corner radius as a fraction of the edge: 25% of a 0.2 cell block = 0.05.</summary>
-    const float DashCornerRatio = 0.25f;
-
-    static Sprite dashSprite;
-
-    /// <summary>
-    /// Hard-edged rounded square. Every texel is either fully opaque or fully clear, so the
-    /// corner comes out as a stepped pixel-art cut instead of a smooth curve. The sprite
-    /// spans one world unit and is scaled down to dashBlockSize.
-    /// </summary>
-    static Sprite DashSprite()
+    void CreateAimLine()
     {
-        if (dashSprite != null) return dashSprite;
+        if (aimLine != null) return;
 
-        const int n = DashTexels;
-        int r = Mathf.Clamp(Mathf.RoundToInt(n * DashCornerRatio), 1, n / 2); // 5 texels = 0.05 cell
-
-        // Exact inset of the arc for each row inside the corner box...
-        var inset = new int[n];
-        for (int y = 0; y < n; y++)
-        {
-            float dy = r - (y + 0.5f);
-            if (dy <= 0f) continue;
-            float dx = r - Mathf.Sqrt(Mathf.Max(0f, r * r - dy * dy));
-            inset[y] = Mathf.Clamp(Mathf.RoundToInt(dx), 0, r);
-        }
-
-        // ...then force a one-texel-per-row staircase. At 20 texels the raw arc drops 3 -> 1
-        // between two rows, which reads as a notch rather than a rounded corner.
-        for (int y = 1; y < r; y++)
-            inset[y] = Mathf.Max(inset[y], inset[y - 1] - 1);
-
-        var tex = new Texture2D(n, n, TextureFormat.RGBA32, false)
-        {
-            name = "AimDashRounded",
-            filterMode = FilterMode.Point,
-            wrapMode = TextureWrapMode.Clamp
-        };
-
-        var px = new Color32[n * n];
-        var solid = new Color32(255, 255, 255, 255);
-        var clear = new Color32(255, 255, 255, 0);
-
-        for (int y = 0; y < n; y++)
-        {
-            int row = Mathf.Min(y, n - 1 - y);      // mirror: same cut top and bottom
-            int cut = inset[row];
-            for (int x = 0; x < n; x++)
-            {
-                int col = Mathf.Min(x, n - 1 - x);  // and left and right
-                px[y * n + x] = col >= cut ? solid : clear;
-            }
-        }
-
-        tex.SetPixels32(px);
-        tex.Apply(false, false);
-
-        // FullRect keeps the mesh exactly the block square; a Tight mesh would trim the
-        // transparent corner texels and make the block wobble by a pixel.
-        dashSprite = Sprite.Create(tex, new Rect(0f, 0f, n, n), new Vector2(0.5f, 0.5f), n,
-            0u, SpriteMeshType.FullRect);
-        dashSprite.name = "AimDashRounded";
-        return dashSprite;
-    }
-
-    void CreateAimDashes()
-    {
-        if (dashRoot != null) return;
-
-        var go = new GameObject("AimDashes");
+        var go = new GameObject("AimLine");
         go.transform.SetParent(transform, false);
-        dashRoot = go.transform;
+        aimLine = go.AddComponent<LineRenderer>();
+        aimLine.useWorldSpace = true;
+        aimLine.widthMultiplier = 0.08f;
+        aimLine.numCapVertices = 2;
+        aimLine.numCornerVertices = 2;
+        aimLine.textureMode = LineTextureMode.Stretch;
+        aimLine.alignment = LineAlignment.View;
+        aimLine.sortingOrder = 30;
 
-        var sprite = DashSprite();
-        dashes = new SpriteRenderer[MaxDashBlocks];
-        for (int i = 0; i < dashes.Length; i++)
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null) shader = Shader.Find("Unlit/Color");
+        if (shader != null)
         {
-            var block = new GameObject("Dash" + i);
-            block.transform.SetParent(dashRoot, false);
-
-            var sr = block.AddComponent<SpriteRenderer>();
-            sr.sprite = sprite;
-            sr.sortingOrder = AimSortingOrder;
-            sr.enabled = false;
-            dashes[i] = sr;
+            var mat = new Material(shader);
+            mat.color = Color.white;
+            aimLine.material = mat;
         }
+
+        aimLine.positionCount = 0;
+        aimLine.enabled = false;
     }
 
     void HideAimPreview()
     {
-        HideDashesFrom(0);
-    }
-
-    void HideDashesFrom(int first)
-    {
-        if (dashes == null) return;
-        for (int i = Mathf.Max(0, first); i < dashes.Length; i++)
-        {
-            if (dashes[i] != null && dashes[i].enabled) dashes[i].enabled = false;
-        }
-    }
-
-    /// <summary>Place one block in every cell of the preview path.</summary>
-    void ShowDashes(List<Vector3> cells, Color color)
-    {
-        CreateAimDashes();
-
-        int count = Mathf.Min(cells.Count, dashes.Length);
-        Vector3 size = Vector3.one * dashBlockSize;
-
-        for (int i = 0; i < count; i++)
-        {
-            var d = dashes[i];
-            d.transform.position = cells[i];
-            d.transform.localScale = size;
-            d.color = color;
-            if (!d.enabled) d.enabled = true;
-        }
-
-        HideDashesFrom(count);
-    }
-
-    void ShowSingleBlock(Vector3 cell, Color color)
-    {
-        CreateAimDashes();
-
-        var d = dashes[0];
-        d.transform.position = cell;
-        d.transform.localScale = Vector3.one * dashBlockSize;
-        d.color = color;
-        d.enabled = true;
-
-        HideDashesFrom(1);
+        if (aimLine == null) return;
+        aimLine.positionCount = 0;
+        aimLine.enabled = false;
     }
 
     void UpdateAimPreview()
     {
+        if (aimLine == null) return;
+
         var mouse = Mouse.current;
         if (mouse == null || Camera.main == null || !Grounded)
         {
@@ -510,32 +432,40 @@ public class PlayerController : MonoBehaviour
         Vector2 world = ScreenToWorld(mouse);
         Vector2Int dir = AimDirection(world - (Vector2)transform.position);
         Vector2Int target = TargetCellFor(FeetCell(), dir);
-        int level = Mathf.Clamp(charge, 1, maxCharge);
+        bool canSpawn = BoxProjectile.CanSpawnAt(target);
 
-        if (!BoxProjectile.CanSpawnAt(target))
+        aimLine.startColor = canSpawn
+            ? new Color(1f, 0.93f, 0.45f, 0.85f)
+            : new Color(1f, 0.35f, 0.30f, 0.85f);
+        aimLine.endColor = canSpawn
+            ? new Color(1f, 0.93f, 0.45f, 0.15f)
+            : new Color(1f, 0.35f, 0.30f, 0.15f);
+
+        if (!canSpawn)
         {
-            // Nothing leaves the hand here: one ghosted block marks the refused cell.
-            ShowSingleBlock(Center(target), ChargePalette.Denied);
+            aimLine.positionCount = 2;
+            aimLine.SetPosition(0, transform.position);
+            aimLine.SetPosition(1, Center(target));
+            aimLine.enabled = true;
             return;
         }
 
-        var cells = BuildPreview(target, dir, level);
-        if (cells.Count == 0)
+        var points = BuildPreview(target, dir, Mathf.Clamp(charge, 1, maxCharge));
+        if (points.Count < 2)
         {
             HideAimPreview();
             return;
         }
 
-        ShowDashes(cells, ChargePalette.WithAlpha(ChargePalette.ForLevel(level), dashAlpha));
+        aimLine.positionCount = points.Count;
+        aimLine.SetPositions(points.ToArray());
+        aimLine.enabled = true;
     }
 
-    /// <summary>
-    /// The cells the ball would visit, starting at the release cell. No point for the
-    /// player's own position: the trail must not draw a diagonal from the hand to the ball.
-    /// </summary>
     List<Vector3> BuildPreview(Vector2Int start, Vector2Int dir, int speed)
     {
         var points = new List<Vector3>(64);
+        points.Add(transform.position);
         points.Add(Center(start));
 
         var startTile = TileAt(start);
@@ -642,6 +572,8 @@ public class PlayerController : MonoBehaviour
 
                 case TileType.Bounce:
                     points.Add(Center(next));
+                    // A spring only pushes back along its own axis; a side hit just stops the ball.
+                    if (!tile.SpringCatches(d)) return points;
                     d = -d;
                     bounces++;
                     if (bounces > 6) return points;
@@ -717,33 +649,6 @@ public class PlayerController : MonoBehaviour
     void OnDisable()
     {
         HideAimPreview();
-    }
-
-    void OnGUI()
-    {
-        if (!Application.isPlaying) return;
-
-        GUIStyle label = new GUIStyle(GUI.skin.label) { fontSize = 14 };
-        label.normal.textColor = new Color(0.85f, 0.89f, 0.98f, 0.9f);
-
-        GUI.Label(new Rect(18f, 44f, 80f, 22f), "POWER", label);
-
-        for (int i = 0; i < maxCharge; i++)
-        {
-            var r = new Rect(88f + i * 28f, 48f, 22f, 14f);
-            // level 1 yellow -> 2 orange -> 3 red, same ramp as the ball and the aim dashes
-            GUI.color = i < charge
-                ? ChargePalette.ForLevel(i + 1)
-                : new Color(1f, 1f, 1f, 0.14f);
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-        }
-        GUI.color = Color.white;
-
-        if (charging)
-        {
-            label.normal.textColor = ChargePalette.ForLevel(Mathf.Clamp(charge, 1, maxCharge));
-            GUI.Label(new Rect(18f, 64f, 300f, 22f), "release to throw  (power " + charge + ")", label);
-        }
     }
 
     /// <summary>Width of the free strip needed beside the feet cell to release a box.</summary>

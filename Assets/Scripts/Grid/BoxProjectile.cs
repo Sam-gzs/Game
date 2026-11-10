@@ -56,6 +56,19 @@ public class BoxProjectile : MonoBehaviour
     bool followStickyAhead;
 
     SpriteRenderer sr;
+
+    // The cat is the ball's skin: idle frames while it is parked, roll frames while it moves.
+    Sprite[] catIdle;
+    Sprite[] catRoll;
+    float catAnim;
+    float catIdleAnim;
+
+    [Tooltip("The cat art's forward is 90 degrees off the movement vector; adjust if needed.")]
+    public float rollAngleOffset = -90f;
+
+    [Tooltip("World-space diameter of the cat ball. Keep it equal to CatCompanion.catHeight so the stopped cat and the cat block match.")]
+    public float catBallSize = 1.0f;
+
     Vector3 fromPos;
     Vector3 toPos;
     float t;
@@ -99,13 +112,22 @@ public class BoxProjectile : MonoBehaviour
         go.transform.position = new Vector3(center.x, center.y, 0f);
 
         var ballSprite = Resources.Load<Sprite>("Ball");
-        if (ballSprite != null) sprite = ballSprite;
 
-        var sr = go.AddComponent<SpriteRenderer>();
-        sr.sprite = sprite;
-        if (material != null) sr.sharedMaterial = material;
-        sr.color = SpeedColor(power);
-        sr.sortingOrder = 6;
+        // The cat itself is the ball: the renderer lives on a child so the collider,
+        // the rigidbody and the logical cell stay on the root object.
+        var catGo = new GameObject("CatVisual");
+        catGo.transform.SetParent(go.transform, false);
+        var csr = catGo.AddComponent<SpriteRenderer>();
+        csr.sortingOrder = 6;
+        if (material != null) csr.sharedMaterial = material;
+
+        var idle = LoadSequence("CatIdle", 6);
+        var roll = LoadSequence("CatRoll", 20);
+        Sprite first = idle.Length > 0 ? idle[0] : (roll.Length > 0 ? roll[0] : ballSprite);
+        if (first == null) first = sprite;
+        csr.sprite = first;
+        csr.color = Color.white;
+        catGo.transform.localScale = Vector3.one;
 
         var body = go.AddComponent<Rigidbody2D>();
         body.bodyType = RigidbodyType2D.Kinematic;
@@ -120,6 +142,10 @@ public class BoxProjectile : MonoBehaviour
         box.fromPos = box.toPos = go.transform.position;
         box.speedLevel = Mathf.Clamp(power, 1, 3);
         box.moving = true;
+        box.sr = csr;
+        box.catIdle = idle;
+        box.catRoll = roll;
+        box.SetCatScale(first);
         box.PressButtonAt(cell);
         box.ApplyJellyAt(cell);
         box.CheckStickyContact();
@@ -127,13 +153,26 @@ public class BoxProjectile : MonoBehaviour
         return box;
     }
 
-    /// <summary>
-    /// Ball tint = its current momentum. Levels 1..3 come from ChargePalette so the ball
-    /// always matches the POWER bar and the aim dashes.
-    /// </summary>
+    static Sprite[] LoadSequence(string prefix, int max)
+    {
+        var list = new System.Collections.Generic.List<Sprite>();
+        for (int i = 0; i < max; i++)
+        {
+            var s = Resources.Load<Sprite>(prefix + "_" + i);
+            if (s == null) break;
+            list.Add(s);
+        }
+        return list.ToArray();
+    }
+
     static Color SpeedColor(int s)
     {
-        return ChargePalette.ForMomentum(s);
+        if (s <= 0) return new Color(0.55f, 0.55f, 0.62f, 1f); // spent
+        if (s >= 5) return new Color(0.55f, 0.95f, 1.00f, 1f); // max momentum
+        if (s == 4) return new Color(1f, 0.98f, 0.80f, 1f);
+        if (s == 3) return new Color(1f, 0.88f, 0.35f, 1f);
+        if (s == 2) return new Color(1f, 0.62f, 0.24f, 1f);
+        return new Color(0.90f, 0.32f, 0.20f, 1f);
     }
 
     static void PlayBreak(TileType type)
@@ -143,14 +182,53 @@ public class BoxProjectile : MonoBehaviour
         else AudioManager.Play(Sfx.BreakStone);
     }
 
+    void SetCatScale(Sprite s)
+    {
+        if (sr == null || s == null) return;
+        float h = s.rect.height / Mathf.Max(1f, s.pixelsPerUnit);
+        float k = catBallSize / Mathf.Max(0.001f, h);
+        sr.transform.localScale = new Vector3(k, k, 1f);
+    }
+
     void UpdateSpeedVisual()
     {
         if (sr == null) sr = GetComponent<SpriteRenderer>();
-        if (sr != null) sr.color = SpeedColor(speedLevel);
+        // The cat art is already coloured: tinting it by momentum would just muddy it.
+        if (sr != null) sr.color = Color.white;
+    }
+
+    void UpdateCatVisual()
+    {
+        if (sr == null) return;
+
+        bool active = moving || falling || sliding;
+        if (active && catRoll != null && catRoll.Length > 0)
+        {
+            float speed = Mathf.Lerp(9f, 18f, Mathf.Clamp01(speedLevel / 5f));
+            catAnim += Time.deltaTime * speed;
+            int f = Mathf.Abs(Mathf.FloorToInt(catAnim)) % catRoll.Length;
+            sr.sprite = catRoll[f];
+            SetCatScale(sr.sprite);
+
+            float ax = Mathf.Abs(Direction.x);
+            float angle = Mathf.Atan2(Direction.y, ax) * Mathf.Rad2Deg + rollAngleOffset;
+            sr.transform.localRotation = Quaternion.Euler(0f, 0f, angle);
+            sr.flipX = Direction.x < 0f;
+        }
+        else if (catIdle != null && catIdle.Length > 0)
+        {
+            catIdleAnim += Time.deltaTime;
+            int f = Mathf.Abs(Mathf.FloorToInt(catIdleAnim * 2f)) % catIdle.Length;
+            sr.sprite = catIdle[f];
+            SetCatScale(sr.sprite);
+            sr.transform.localRotation = Quaternion.identity;
+        }
     }
 
     void Update()
     {
+        UpdateCatVisual();
+
         if (Resting && !wasResting && !stuck) AudioManager.Play(Sfx.BallRest);
         wasResting = Resting;
 
@@ -247,6 +325,7 @@ public class BoxProjectile : MonoBehaviour
                 if (speedLevel >= required)
                 {
                     PlayBreak(tile.type);
+                    BrickBreakFx.Play(tile.type, tile.transform.position);
                     Destroy(tile.gameObject);
                     speedLevel -= 1;
                     fromPos = transform.position;
@@ -313,6 +392,8 @@ public class BoxProjectile : MonoBehaviour
 
                     tile.AttachTo(this);
                     followStickyAhead = true;
+                    if (GridTile.TraceSticky)
+                        Debug.Log($"[Sticky] PUSH {tile.cell} -> {ahead} dir {dir} speed {speedLevel}");
                     fromPos = transform.position;
                     MoveToCell(blockedCell);
                     toPos = GridUtil.CellCenter(Cell);
@@ -326,6 +407,31 @@ public class BoxProjectile : MonoBehaviour
                 MoveToCell(blockedCell);
                 toPos = GridUtil.CellCenter(Cell);
                 t = 0f;
+                return;
+            }
+
+            // Spring: a real spring only gives along the axis of its face. A ball arriving
+            // against the face is thrown straight back with the same momentum (elastic);
+            // every other side is a solid block. Checked for falling balls too, which is
+            // exactly how a spring gets used as a trampoline.
+            if (tile.type == TileType.Bounce)
+            {
+                if (tile.SpringCatches(dir))
+                {
+                    AudioManager.Play(Sfx.Bounce);
+                    tile.SpringHit();
+
+                    Direction = -dir;
+                    moving = true;
+                    falling = false;
+                    sliding = false;
+                    fromPos = toPos;
+                    t = 0f;
+                    return;
+                }
+
+                CeilingPenalty(dir);
+                StopHere();
                 return;
             }
 
@@ -399,16 +505,7 @@ public class BoxProjectile : MonoBehaviour
                     return;
                 }
 
-                // Sticky blocks are handled above, for both moving and falling balls.
-
-                if (tile.type == TileType.Bounce)
-                {
-                    AudioManager.Play(Sfx.Bounce);
-                    Direction = -Direction;
-                    fromPos = toPos;
-                    t = 0f;
-                    return;
-                }
+                // Sticky blocks and springs are handled above, for moving and falling balls alike.
             }
         }
 
@@ -461,7 +558,21 @@ public class BoxProjectile : MonoBehaviour
         {
             Vector2Int dir = newCell - old;
             Vector2Int stickyCell = followStickyAhead ? newCell + dir : old;
-            followSticky.FollowTo(stickyCell);
+
+            // A carried sticky follows one cell per step. If the ball turned around, the target
+            // sits on the far side of the ball - leave the sticky where it is this step instead
+            // of teleporting it through the ball. The carry is kept, it just does not move.
+            Vector2Int from = followSticky.cell;
+            int step = Mathf.Abs(stickyCell.x - from.x) + Mathf.Abs(stickyCell.y - from.y);
+
+            if (step <= 1)
+            {
+                followSticky.FollowTo(stickyCell);
+            }
+            else if (GridTile.TraceSticky)
+            {
+                Debug.Log($"[Sticky] HOLD {from} (ball {old}->{newCell}, target {stickyCell} was {step} cells away)");
+            }
         }
 
         CheckStickyContact();
@@ -575,7 +686,8 @@ public class BoxProjectile : MonoBehaviour
             if (t.type == TileType.Switch || t.type == TileType.Plate ||
                 t.type == TileType.Jelly || t.type == TileType.BallSwitch ||
                 t.type == TileType.TriggerPlayer || t.type == TileType.TriggerBall ||
-                t.type == TileType.TextAnchor) continue; // pass through
+                t.type == TileType.TextAnchor || t.type == TileType.CatTrigger ||
+                t.type == TileType.CatExit) continue; // pass through
             if (t.type == TileType.Gate && t.GateOpen) continue;                // open gate: hole
 
             return false;
@@ -619,7 +731,8 @@ public class BoxProjectile : MonoBehaviour
             if (t.type == TileType.Switch || t.type == TileType.Plate ||
                 t.type == TileType.Jelly || t.type == TileType.BallSwitch ||
                 t.type == TileType.TriggerPlayer || t.type == TileType.TriggerBall ||
-                t.type == TileType.TextAnchor) continue;
+                t.type == TileType.TextAnchor || t.type == TileType.CatTrigger ||
+                t.type == TileType.CatExit) continue;
             if (t.type == TileType.Gate && t.GateOpen) continue;
 
             return false;
