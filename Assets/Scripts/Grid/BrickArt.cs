@@ -61,6 +61,11 @@ public static class BrickArt
         int m = MaterialIndex(type);
         if (m < 0) return new Sprite[0];
 
+        // Local art drop: glass / wood / iron crates (charge level 1 / 2 / 3).
+        // The fork's BlockDirt / BlockWood / BlockStone stay as a fallback.
+        var local = BlockArt.CrateFrames(type);
+        if (local != null && local.Length > 0) return local;
+
         if (cache[m] != null) return cache[m];
 
         string baseName = BaseName(type);

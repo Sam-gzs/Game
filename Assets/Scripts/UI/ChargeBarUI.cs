@@ -21,7 +21,10 @@ public class ChargeBarUI : MonoBehaviour
 
     Image image;
     Sprite[] sprites;
+    Sprite[] gifFrames;
     int shown = -1;
+    float gifTimer;
+    int gifFrame = -1;
 
     /// <summary>Builds the widget once per scene. Safe to call from every player Awake.</summary>
     public static void Ensure()
@@ -42,6 +45,7 @@ public class ChargeBarUI : MonoBehaviour
         var ui = canvas.gameObject.AddComponent<ChargeBarUI>();
         ui.image = img;
         ui.sprites = LoadSprites();
+        ui.gifFrames = LoadChargeGif();
 
         // Match the art's aspect so preserveAspect has nothing to letterbox.
         var first = ui.sprites.Length > 0 ? ui.sprites[0] : null;
@@ -68,13 +72,15 @@ public class ChargeBarUI : MonoBehaviour
         if (instance.image.enabled != visible) instance.image.enabled = visible;
     }
 
+    /// <summary>The artist's four-state bar, with the fork's UI sprites as fallback.</summary>
     static Sprite[] LoadSprites()
     {
         var list = new Sprite[States];
         int found = 0;
         for (int i = 0; i < States; i++)
         {
-            var s = Resources.Load<Sprite>("UI/ChargeBar_" + i);
+            var s = BlockArt.Get("ui_charge_" + i);
+            if (s == null) s = Resources.Load<Sprite>("UI/ChargeBar_" + i);
             if (s == null) break;
             list[i] = s;
             found = i + 1;
@@ -87,6 +93,19 @@ public class ChargeBarUI : MonoBehaviour
         return trimmed;
     }
 
+    /// <summary>The charge GIF from the art drop, played at its native 200 ms per frame.</summary>
+    static Sprite[] LoadChargeGif()
+    {
+        var list = new System.Collections.Generic.List<Sprite>();
+        for (int i = 0; i < 4; i++)
+        {
+            var s = BlockArt.Get("anim_charge_" + i);
+            if (s == null) break;
+            list.Add(s);
+        }
+        return list.Count >= 2 ? list.ToArray() : null;
+    }
+
     void SetLevel(int level)
     {
         if (image == null || sprites == null || sprites.Length == 0) return;
@@ -95,7 +114,29 @@ public class ChargeBarUI : MonoBehaviour
         if (level == shown) return;
 
         shown = level;
+        gifTimer = 0f;
+        gifFrame = -1;
+
+        // While charging, show the real GIF animation rather than a still frame.
+        if (level > 0 && gifFrames != null && gifFrames.Length > 0)
+        {
+            image.sprite = gifFrames[0];
+            gifFrame = 0;
+            return;
+        }
+
         var sprite = sprites[level];
         if (sprite != null) image.sprite = sprite;
+    }
+
+    void Update()
+    {
+        if (image == null || shown <= 0 || gifFrames == null || gifFrames.Length == 0) return;
+
+        gifTimer += Time.deltaTime;
+        int f = Mathf.FloorToInt(gifTimer / BlockArt.GifFrameDuration) % gifFrames.Length;
+        if (f == gifFrame) return;
+        gifFrame = f;
+        image.sprite = gifFrames[f];
     }
 }

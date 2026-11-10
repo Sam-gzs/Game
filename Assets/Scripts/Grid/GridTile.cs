@@ -31,8 +31,9 @@ public enum TileType
 }
 
 /// <summary>
-/// The four rotations of the refractor's blue-grey triangular body.  The name reads
-/// as the corner the wedge sits in: RightUp reflects a ball towards the upper right.
+/// The four rotations of the refractor's blue-grey triangular BODY.  The name is
+/// literally the corner the solid wedge occupies (LeftUp = wedge in the top-left,
+/// etc.), which is what the art shows and what decides which side the ball hits.
 /// Auto keeps the fork's original two-diagonal art (BlockRefractUp / Down).
 /// </summary>
 public enum RefractFacing
@@ -983,12 +984,19 @@ public class GridTile : MonoBehaviour
                 RefreshPlateVisual();
                 break;
             case TileType.Pickup:
+            {
                 sr.enabled = true;
                 sr.color = Color.white;
-                sr.sprite = ResourceSprite("Pickup");
+                // The extra-box pickup is the second (orange) cat, walking in place.
+                Sprite[] catWalk = CatArt.Walk(true);
+                sr.sprite = (catWalk != null && catWalk.Length > 0)
+                    ? catWalk[0] : ResourceSprite("Pickup");
+                if (Application.isPlaying && GetComponent<CatPickup>() == null)
+                    gameObject.AddComponent<CatPickup>();
                 col.enabled = true;
                 col.isTrigger = true;
                 break;
+            }
             case TileType.Spawn:
                 // visible marker while editing, invisible while playing
                 sr.enabled = !Application.isPlaying;
@@ -1028,6 +1036,8 @@ public class GridTile : MonoBehaviour
                 break;
         }
 
+        ApplyLocalArt();
+
         int speedPips = type == TileType.Stone ? 3 : type == TileType.Wood ? 2 : type == TileType.Dirt ? 1 : 0;
         SetThresholdPips(speedPips);
 
@@ -1062,20 +1072,24 @@ public class GridTile : MonoBehaviour
     {
         switch (refractFacing)
         {
-            case RefractFacing.LeftUp:
-                if (s_wedgeLU == null) s_wedgeLU = Resources.Load<Sprite>("Blocks/mirror_lu");
+            // Wedge corner -> sprite.  mirror_<xy> is named after the ORIGINAL art's
+            // rotation, so the mapping below is deliberately a 180-degree swap of the
+            // naive name match (e.g. RightUp must show the wedge in the top-right,
+            // which is mirror_ld, not mirror_ru).
+            case RefractFacing.LeftUp:      // wedge top-left,    "/" hypotenuse
+                if (s_wedgeLU == null) s_wedgeLU = Resources.Load<Sprite>("Blocks/mirror_rd");
                 if (s_wedgeLU != null) return s_wedgeLU;
                 break;
-            case RefractFacing.LeftDown:
-                if (s_wedgeLD == null) s_wedgeLD = Resources.Load<Sprite>("Blocks/mirror_ld");
+            case RefractFacing.LeftDown:    // wedge bottom-left, "\" hypotenuse
+                if (s_wedgeLD == null) s_wedgeLD = Resources.Load<Sprite>("Blocks/mirror_ru");
                 if (s_wedgeLD != null) return s_wedgeLD;
                 break;
-            case RefractFacing.RightUp:
-                if (s_wedgeRU == null) s_wedgeRU = Resources.Load<Sprite>("Blocks/mirror_ru");
+            case RefractFacing.RightUp:     // wedge top-right,   "\" hypotenuse
+                if (s_wedgeRU == null) s_wedgeRU = Resources.Load<Sprite>("Blocks/mirror_ld");
                 if (s_wedgeRU != null) return s_wedgeRU;
                 break;
-            case RefractFacing.RightDown:
-                if (s_wedgeRD == null) s_wedgeRD = Resources.Load<Sprite>("Blocks/mirror_rd");
+            case RefractFacing.RightDown:   // wedge bottom-right, "/" hypotenuse
+                if (s_wedgeRD == null) s_wedgeRD = Resources.Load<Sprite>("Blocks/mirror_lu");
                 if (s_wedgeRD != null) return s_wedgeRD;
                 break;
         }
@@ -1180,13 +1194,48 @@ public class GridTile : MonoBehaviour
     static readonly System.Collections.Generic.Dictionary<string, Sprite> s_sprites =
         new System.Collections.Generic.Dictionary<string, Sprite>();
 
+    // Fork resource name -> sprite in the local art drop (Resources/Blocks).
+    // A missing drop silently falls back to the fork's own Resources sprite.
+    static readonly System.Collections.Generic.Dictionary<string, string> s_localNames =
+        new System.Collections.Generic.Dictionary<string, string>
+    {
+        { "Sticky", "sticky" },
+        { "Slider", "slider" },
+        { "Gate", "gate" },
+        { "SwitchOff", "btn_off" },
+        { "SwitchOn", "btn_on" },
+    };
+
     static Sprite ResourceSprite(string name)
     {
         Sprite s;
         if (s_sprites.TryGetValue(name, out s) && s != null) return s;
-        s = Resources.Load<Sprite>(name);
+        string local;
+        if (s_localNames.TryGetValue(name, out local)) s = BlockArt.Get(local);
+        if (s == null) s = Resources.Load<Sprite>(name);
         s_sprites[name] = s;
         return s;
+    }
+
+    /// <summary>
+    /// After the fork's type switch has chosen a sprite/color, override it with the
+    /// local art drop where one exists. The four-way refractor keeps its own logic
+    /// (RefractorSprite), the ball switch keeps its cyan tint, and the gate keeps
+    /// the open/closed alpha set by SetGateOpen.
+    /// </summary>
+    void ApplyLocalArt()
+    {
+        if (sr == null) return;
+        if (type == TileType.RefractorDown || type == TileType.RefractorUp ||
+            type == TileType.Mirror || type == TileType.BallSwitch ||
+            type == TileType.Pickup) return;
+
+        Sprite art = BlockArt.ForTile(type);
+        if (art == null) return;
+
+        sr.sprite = art;
+        if (type != TileType.Gate) sr.color = Color.white;
+        sr.enabled = true;
     }
 
     public void SetSwitchState(bool on)

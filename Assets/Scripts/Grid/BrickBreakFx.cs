@@ -27,13 +27,27 @@ public class BrickBreakFx : MonoBehaviour
     Sprite[] frames;
     SpriteRenderer sr;
     float age;
+    float frameRate;
+    int firstFrame;
 
     public static void Play(TileType type, Vector3 position)
     {
         if (!Application.isPlaying) return;
 
-        var frames = BrickArt.Frames(type);
-        if (frames.Length < 2) return;   // a single frame is not an animation
+        // The artist's real GIF frames (200 ms each) win. Without the art drop we
+        // keep the fork's crack sequence at its own frame rate, starting at frame 1
+        // because frame 0 was already on screen as the intact block.
+        var frames = BlockArt.CrateAnimation(type);
+        float fps = 1f / BlockArt.GifFrameDuration;
+        int first = 0;
+
+        if (frames == null || frames.Length < 2)
+        {
+            frames = BrickArt.Frames(type);
+            fps = FramesPerSecond;
+            first = 1;
+        }
+        if (frames.Length < 2) return;
 
         var go = new GameObject("BrickBreak");
         go.transform.position = position;
@@ -45,7 +59,9 @@ public class BrickBreakFx : MonoBehaviour
         var fx = go.AddComponent<BrickBreakFx>();
         fx.frames = frames;
         fx.sr = renderer;
-        renderer.sprite = frames[1];     // frame 0 was already on screen as the block itself
+        fx.frameRate = fps;
+        fx.firstFrame = first;
+        renderer.sprite = frames[Mathf.Min(first, frames.Length - 1)];
     }
 
     void Update()
@@ -58,15 +74,15 @@ public class BrickBreakFx : MonoBehaviour
 
         age += Time.deltaTime;
 
-        float step = 1f / Mathf.Max(1f, FramesPerSecond);
-        int index = 1 + Mathf.FloorToInt(age / step);
+        float step = 1f / Mathf.Max(1f, frameRate);
+        int index = firstFrame + Mathf.FloorToInt(age / step);
 
         if (index >= frames.Length)
         {
             index = frames.Length - 1;
 
-            // the last frame starts at (length - 2) * step, then hold, then fade
-            float sinceLast = age - (frames.Length - 2) * step;
+            // the last frame starts after (length - 1 - firstFrame) steps, then hold, then fade
+            float sinceLast = age - (frames.Length - 1 - firstFrame) * step;
             if (sinceLast > HoldTime)
             {
                 float a = 1f - Mathf.Clamp01((sinceLast - HoldTime) / Mathf.Max(0.01f, FadeTime));
