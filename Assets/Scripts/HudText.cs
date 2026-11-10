@@ -5,10 +5,10 @@ using UnityEngine.SceneManagement;
 /// <summary>
 /// Controls guide, split across the first few levels.
 ///
-/// A hint is either a line of text anchored in screen space, or - when the art drop has
-/// key caps for it - a row of key-cap images that floats above the player's head and
-/// follows them. Hints without key-cap art (e.g. R, which has no art yet) keep the old
-/// text panel, so nothing ever disappears silently.
+/// A hint is either a line of text in screen space, or - when the art drop has key caps
+/// for it - a row of key-cap images drawn at the SAME anchor, so swapping text for art
+/// never moves the prompt or changes how much of the screen it covers. Hints without
+/// key-cap art (e.g. R, which has no art yet) keep the old text panel.
 /// </summary>
 public class HudText : MonoBehaviour
 {
@@ -19,9 +19,6 @@ public class HudText : MonoBehaviour
     /// <summary>New scenes and old ones alike show the current control hints.</summary>
     public bool useDefaults = true;
 
-    [Tooltip("How far above the player's transform the key caps float, in world units.")]
-    public float keyCapLift = 1.6f;
-
     [Tooltip("Key cap height as a fraction of the screen height.")]
     public float keyCapScreenFraction = 0.075f;
 
@@ -31,9 +28,6 @@ public class HudText : MonoBehaviour
 
     /// <summary>Key-cap art names for the current hint; null keeps the text panel.</summary>
     string[] keyCaps;
-
-    PlayerController player;
-    Camera cam;
 
     static readonly Dictionary<string, Texture2D> s_keyTextures = new Dictionary<string, Texture2D>();
 
@@ -150,25 +144,18 @@ public class HudText : MonoBehaviour
     {
         if (keyCaps == null || keyCaps.Length == 0) return false;
 
-        if (player == null) player = Object.FindFirstObjectByType<PlayerController>();
-        if (cam == null) cam = Camera.main;
-        if (player == null || cam == null) return false;
-
-        // Nothing is drawn unless every cap resolves - mixing caps and text looks broken.
+        // Nothing is drawn unless every cap resolves - a half-drawn row looks broken.
         for (int i = 0; i < keyCaps.Length; i++)
             if (KeyTexture(keyCaps[i]) == null) return false;
-
-        Vector3 world = player.transform.position + Vector3.up * keyCapLift;
-        Vector3 sp = cam.WorldToScreenPoint(world);
-        if (sp.z <= 0f) return false;   // behind the camera
 
         float size = Mathf.Clamp(Screen.height * keyCapScreenFraction, 28f, 110f);
         float gap = size * 0.22f;
         float total = keyCaps.Length * size + (keyCaps.Length - 1) * gap;
-        float bob = Mathf.Sin(Time.time * 3.2f) * size * 0.07f;
 
-        float x = sp.x - total * 0.5f;
-        float y = (Screen.height - sp.y) - size * 1.25f + bob;
+        // Same anchor and the same screen clamping the text panel used, so the prompt
+        // appears in exactly the place and covers the same visible range as before.
+        float x = Mathf.Clamp(anchor.x * Screen.width, 12f, Mathf.Max(12f, Screen.width - total - 12f));
+        float y = Mathf.Clamp(anchor.y * Screen.height, 12f, Mathf.Max(12f, Screen.height - size - 12f));
 
         for (int i = 0; i < keyCaps.Length; i++)
         {
