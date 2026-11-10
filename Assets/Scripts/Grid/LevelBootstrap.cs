@@ -34,18 +34,30 @@ public class LevelBootstrap : MonoBehaviour
             if (rb != null) rb.linearVelocity = Vector2.zero;
         }
 
+        if (tiles.Length == 0)
+        {
+            // Nothing to frame: the loaded scene is not a level, or every tile is inactive.
+            // Leaving the camera untouched is far better than collapsing it onto an empty
+            // spot - that used to render as a flat blue screen with no clue what went wrong.
+            Debug.LogError("[LevelBootstrap] No GridTile found in scene '" + gameObject.scene.name +
+                           "'. Camera framing skipped - is this really a level scene, and are the tiles active?");
+        }
+
         var cam = Object.FindFirstObjectByType<CameraFollow>();
         if (cam != null)
         {
-            cam.minX = minX + 9.5f;
-            cam.maxX = maxX - 9.5f;
-            if (cam.minX > cam.maxX)
+            if (tiles.Length > 0)
             {
-                float mid = (minX + maxX) * 0.5f;
-                cam.minX = mid;
-                cam.maxX = mid;
+                cam.minX = minX + 9.5f;
+                cam.maxX = maxX - 9.5f;
+                if (cam.minX > cam.maxX)
+                {
+                    float mid = (minX + maxX) * 0.5f;
+                    cam.minX = mid;
+                    cam.maxX = mid;
+                }
+                cam.maxY = 12f;
             }
-            cam.maxY = 12f;
             if (player != null) cam.target = player.transform;
         }
 
